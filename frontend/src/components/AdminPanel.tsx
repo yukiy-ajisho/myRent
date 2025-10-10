@@ -1,0 +1,411 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
+import { signOut } from "@/lib/auth";
+
+interface Property {
+  property_id: string;
+  name: string;
+  timezone: string;
+  active: boolean;
+}
+
+interface DivisionRule {
+  rule_id: string;
+  property_id: string;
+  utility: string;
+  method: string;
+}
+
+interface UtilityActual {
+  actual_id: string;
+  property_id: string;
+  month_start: string;
+  utility: string;
+  amount: number;
+}
+
+interface BootstrapData {
+  properties: Property[];
+  divisionRules: DivisionRule[];
+  utilityActuals: UtilityActual[];
+}
+
+const UTILITIES = ["electricity", "gas", "water", "internet", "garbage"];
+const DIVISION_METHODS = ["fixed", "equalshare", "bydays"];
+
+export default function AdminPanel() {
+  const [bootstrapData, setBootstrapData] = useState<BootstrapData | null>(
+    null
+  );
+  const [selectedProperty, setSelectedProperty] = useState<string>("");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [divisionRules, setDivisionRules] = useState<Record<string, string>>(
+    {}
+  );
+  const [utilityAmounts, setUtilityAmounts] = useState<Record<string, string>>(
+    {}
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [runResult, setRunResult] = useState<any>(null);
+  const [dumpData, setDumpData] = useState<any>(null);
+
+  // Initialize month to current month
+  useEffect(() => {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}-01`;
+    setSelectedMonth(currentMonth);
+  }, []);
+
+  // Load bootstrap data
+  useEffect(() => {
+    loadBootstrapData();
+  }, []);
+
+  // Load data when property or month changes
+  useEffect(() => {
+    if (selectedProperty && selectedMonth) {
+      loadBootstrapData(selectedProperty, selectedMonth);
+    }
+  }, [selectedProperty, selectedMonth]);
+
+  const loadBootstrapData = async (
+    propertyId?: string,
+    monthStart?: string
+  ) => {
+    try {
+      setIsLoading(true);
+      const data = await api.getBootstrap(propertyId, monthStart);
+      setBootstrapData(data);
+
+      // Initialize division rules
+      const rules: Record<string, string> = {};
+      data.divisionRules.forEach((rule: DivisionRule) => {
+        if (rule.property_id === propertyId) {
+          rules[rule.utility] = rule.method;
+        }
+      });
+      setDivisionRules(rules);
+
+      // Initialize utility amounts
+      const amounts: Record<string, string> = {};
+      data.utilityActuals.forEach((actual: UtilityActual) => {
+        amounts[actual.utility] = actual.amount.toString();
+      });
+      setUtilityAmounts(amounts);
+    } catch (error) {
+      console.error("Error loading bootstrap data:", error);
+      setMessage("Error loading data");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!selectedProperty) {
+      setMessage("Please select a property");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setMessage("");
+
+      // Save division rules
+      const ruleItems = UTILITIES.map((utility) => ({
+        utility,
+        method: divisionRules[utility] || "equalshare",
+      }));
+
+      await api.saveDivisionRules({
+        property_id: selectedProperty,
+        items: ruleItems,
+      });
+
+      // Save utility amounts (only non-empty values)
+      for (const [utility, amount] of Object.entries(utilityAmounts)) {
+        if (amount && amount.trim() !== "") {
+          await api.saveUtilityActual({
+            property_id: selectedProperty,
+            month_start: selectedMonth,
+            utility,
+            amount: parseFloat(amount),
+          });
+        }
+      }
+
+      setMessage("Settings saved successfully");
+
+      // Reload data to show saved values
+      await loadBootstrapData(selectedProperty, selectedMonth);
+    } catch (error) {
+      console.error("Error saving:", error);
+      setMessage("Error saving settings");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRun = async () => {
+    if (!selectedProperty || !selectedMonth) {
+      setMessage("Please select property and month");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setMessage("");
+
+      const result = await api.runBill({
+        property_id: selectedProperty,
+        month_start: selectedMonth,
+      });
+
+      setRunResult(result);
+      setMessage(
+        `Bill calculation completed. Created ${result.lines_created} lines.`
+      );
+    } catch (error) {
+      console.error("Error running bill:", error);
+      setMessage("Error running bill calculation");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDumpAll = async () => {
+    try {
+      setIsLoading(true);
+      const data = await api.dumpAll();
+      setDumpData(data);
+    } catch (error) {
+      console.error("Error dumping data:", error);
+      setMessage("Error loading dump data");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900">Admin Panel</h1>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+
+      {/* Context Selection */}
+      <div className="bg-white shadow rounded-lg p-6 mb-8">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">Context</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Property
+            </label>
+            <select
+              value={selectedProperty}
+              onChange={(e) => setSelectedProperty(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Select Property</option>
+              {bootstrapData?.properties.map((property) => (
+                <option key={property.property_id} value={property.property_id}>
+                  {property.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Month
+            </label>
+            <input
+              type="month"
+              value={selectedMonth ? selectedMonth.substring(0, 7) : ""}
+              onChange={(e) => setSelectedMonth(`${e.target.value}-01`)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Utility Settings Grid */}
+      <div className="bg-white shadow rounded-lg p-6 mb-8">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">
+          Utility Settings
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Utility
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Division Method
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Amount
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {UTILITIES.map((utility) => (
+                <tr key={utility}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 capitalize">
+                    {utility}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <select
+                      value={divisionRules[utility] || "equalshare"}
+                      onChange={(e) =>
+                        setDivisionRules((prev) => ({
+                          ...prev,
+                          [utility]: e.target.value,
+                        }))
+                      }
+                      className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {DIVISION_METHODS.map((method) => (
+                        <option key={method} value={method}>
+                          {method}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={utilityAmounts[utility] || ""}
+                      onChange={(e) =>
+                        setUtilityAmounts((prev) => ({
+                          ...prev,
+                          [utility]: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter amount"
+                      className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-32"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 flex gap-4">
+          <button
+            onClick={handleSave}
+            disabled={isLoading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button
+            onClick={handleRun}
+            disabled={isLoading || !selectedProperty || !selectedMonth}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+          >
+            Run
+          </button>
+        </div>
+      </div>
+
+      {/* Run Result */}
+      {runResult && (
+        <div className="bg-white shadow rounded-lg p-6 mb-8">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Run Result</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-gray-50 p-4 rounded-md">
+              <div className="text-sm text-gray-500">Bill Run ID</div>
+              <div className="text-lg font-medium">{runResult.bill_run_id}</div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-md">
+              <div className="text-sm text-gray-500">Lines Created</div>
+              <div className="text-lg font-medium">
+                {runResult.lines_created}
+              </div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-md">
+              <div className="text-sm text-gray-500">Total Rent</div>
+              <div className="text-lg font-medium">
+                ${runResult.totals.rent.toFixed(2)}
+              </div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-md">
+              <div className="text-sm text-gray-500">Grand Total</div>
+              <div className="text-lg font-medium">
+                ${runResult.totals.grand_total.toFixed(2)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message */}
+      {message && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-8">
+          <p className="text-blue-800">{message}</p>
+        </div>
+      )}
+
+      {/* Dump All Tables */}
+      <div className="bg-white shadow rounded-lg p-6 mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-medium text-gray-900">All Tables</h2>
+          <button
+            onClick={handleDumpAll}
+            disabled={isLoading}
+            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
+          >
+            Load All Data
+          </button>
+        </div>
+
+        {dumpData && (
+          <div className="space-y-4">
+            {Object.entries(dumpData).map(
+              ([tableName, data]: [string, any]) => (
+                <div
+                  key={tableName}
+                  className="border border-gray-200 rounded-md"
+                >
+                  <details className="p-4">
+                    <summary className="cursor-pointer font-medium text-gray-900">
+                      {tableName} ({Array.isArray(data) ? data.length : "error"}{" "}
+                      records)
+                    </summary>
+                    <div className="mt-4">
+                      <pre className="bg-gray-50 p-4 rounded-md overflow-auto text-sm">
+                        {JSON.stringify(data, null, 2)}
+                      </pre>
+                    </div>
+                  </details>
+                </div>
+              )
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,19 @@
+{
+  "name": "bill-management-system",
+  "version": "1.0.0",
+  "description": "Bill Management System with Supabase Auth and Google OAuth",
+  "scripts": {
+    "start": "./start.sh",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm run dev",
+    "install-all": "cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "billing",
+    "supabase",
+    "nextjs",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC"
+}
