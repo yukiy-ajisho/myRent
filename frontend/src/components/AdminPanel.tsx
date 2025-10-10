@@ -35,6 +35,50 @@ interface BootstrapData {
 const UTILITIES = ["electricity", "gas", "water", "internet", "garbage"];
 const DIVISION_METHODS = ["fixed", "equalshare", "bydays"];
 
+// JSONデータをテーブル形式に変換する関数
+const renderDataAsTable = (data: any, tableName: string) => {
+  if (!Array.isArray(data) || data.length === 0) {
+    return <div className="text-gray-500 text-sm">No data available</div>;
+  }
+
+  const columns = Object.keys(data[0]);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse">
+        <thead>
+          <tr className="bg-gray-100 border-b">
+            {columns.map((column) => (
+              <th
+                key={column}
+                className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-r last:border-r-0"
+              >
+                {column.replace(/_/g, " ")}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, index) => (
+            <tr key={index} className="border-b hover:bg-gray-50">
+              {columns.map((column) => (
+                <td
+                  key={column}
+                  className="px-4 py-3 text-sm text-gray-900 border-r last:border-r-0"
+                >
+                  {typeof row[column] === "object"
+                    ? JSON.stringify(row[column])
+                    : String(row[column])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 export default function AdminPanel() {
   const [bootstrapData, setBootstrapData] = useState<BootstrapData | null>(
     null
@@ -395,9 +439,7 @@ export default function AdminPanel() {
                       records)
                     </summary>
                     <div className="mt-4">
-                      <pre className="bg-gray-50 p-4 rounded-md overflow-auto text-sm">
-                        {JSON.stringify(data, null, 2)}
-                      </pre>
+                      {renderDataAsTable(data, tableName)}
                     </div>
                   </details>
                 </div>
