@@ -3,10 +3,10 @@
 import { createClient } from "@/lib/supabase-client";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getCodeVerifier, clearCodeVerifier } from "@/lib/pkce";
 
 export default function AuthCallback() {
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -32,8 +32,23 @@ export default function AuthCallback() {
 
         if (code) {
           console.log("AuthCallback: Found code, exchanging for session");
-          const { data, error: exchangeError } =
-            await supabase.auth.exchangeCodeForSession(code);
+
+          // Get the stored code verifier
+          const codeVerifier = getCodeVerifier();
+          console.log(
+            "AuthCallback: Code verifier:",
+            codeVerifier ? "found" : "not found"
+          );
+
+          if (!codeVerifier) {
+            console.error("AuthCallback: No code verifier found");
+            router.push("/login?error=no_code_verifier");
+            return;
+          }
+
+          const { data, error: exchangeError } = await (
+            supabase.auth as any
+          ).exchangeCodeForSession(code, codeVerifier);
           console.log("AuthCallback: Exchange result:", {
             data,
             exchangeError,
@@ -49,6 +64,8 @@ export default function AuthCallback() {
             console.log(
               "AuthCallback: Session established, redirecting to admin"
             );
+            // Clear the code verifier after successful exchange
+            clearCodeVerifier();
             router.push("/admin");
             return;
           }
@@ -98,19 +115,6 @@ export default function AuthCallback() {
           <p className="mt-2 text-gray-600">
             Please wait while we complete your sign-in.
           </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-red-600">
-            Authentication Error
-          </h2>
-          <p className="mt-2 text-gray-600">{error}</p>
         </div>
       </div>
     );

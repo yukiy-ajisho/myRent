@@ -3,6 +3,11 @@
 import { createClient } from "@/lib/supabase-client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  generateCodeVerifier,
+  generateCodeChallenge,
+  storeCodeVerifier,
+} from "@/lib/pkce";
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -27,12 +32,24 @@ export default function LoginPage() {
   const handleSignIn = async () => {
     try {
       setIsLoading(true);
+
+      // Generate PKCE parameters
+      const codeVerifier = generateCodeVerifier();
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+      // Store code verifier for later use
+      storeCodeVerifier(codeVerifier);
+
       const supabase = createClient();
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            code_challenge: codeChallenge,
+            code_challenge_method: "S256",
+          },
         },
       });
 
