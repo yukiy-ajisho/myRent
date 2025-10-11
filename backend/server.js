@@ -130,6 +130,43 @@ app.post("/save-division-rules", async (req, res) => {
   }
 });
 
+// POST /save-stay-periods - 滞在期間保存
+app.post("/save-stay-periods", async (req, res) => {
+  try {
+    const { property_id, stay_periods } = req.body;
+
+    if (!property_id || !stay_periods) {
+      return res.status(400).json({ error: "Invalid request data" });
+    }
+
+    // Delete existing stay records for this property
+    await supabase.from("stay_record").delete().eq("property_id", property_id);
+
+    // Insert new stay records
+    const stayRecords = Object.entries(stay_periods).map(
+      ([user_id, period]) => ({
+        user_id,
+        property_id: parseInt(property_id),
+        start_date: period.startDate,
+        end_date: period.endDate,
+      })
+    );
+
+    if (stayRecords.length > 0) {
+      const { error: insertError } = await supabase
+        .from("stay_record")
+        .insert(stayRecords);
+
+      if (insertError) throw insertError;
+    }
+
+    res.json({ ok: true, records_saved: stayRecords.length });
+  } catch (error) {
+    console.error("Save stay periods error:", error);
+    res.status(500).json({ error: "Failed to save stay periods" });
+  }
+});
+
 // POST /utility-actual - ユーティリティ実績保存
 app.post("/utility-actual", async (req, res) => {
   try {
@@ -410,13 +447,15 @@ async function calculateBills(
         detail_json: { method, reason: "no_residents" },
       });
     } else if (method === "fixed") {
-      // Fixed - assign to house account
-      billLines.push({
-        bill_run_id: billRun.bill_run_id,
-        user_id: null,
-        utility: actual.utility,
-        amount: amount,
-        detail_json: { method },
+      // Fixed - assign fixed amount to each user
+      Object.keys(userDays).forEach((userId) => {
+        billLines.push({
+          bill_run_id: billRun.bill_run_id,
+          user_id: userId,
+          utility: actual.utility,
+          amount: amount,
+          detail_json: { method },
+        });
       });
     } else if (method === "equalshare") {
       // Equal share - divide equally among active tenants

@@ -50,6 +50,17 @@ export const api = {
     });
   },
 
+  // Save stay periods
+  saveStayPeriods: (data: {
+    property_id: string;
+    stay_periods: Record<string, { startDate: string; endDate: string }>;
+  }) => {
+    return apiRequest("/save-stay-periods", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
   // Save utility actual
   saveUtilityActual: (data: {
     property_id: string;

@@ -132,8 +132,10 @@ export default function AdminPanel() {
 
       const allUsers = data.app_user || [];
       const userProperties = data.user_property || [];
+      const stayRecords = data.stay_record || [];
       console.log("All users:", allUsers);
       console.log("User properties:", userProperties);
+      console.log("Stay records:", stayRecords);
 
       // Filter users who are active tenants and belong to this property
       const propertyUsers = allUsers.filter((user: any) => {
@@ -157,10 +159,24 @@ export default function AdminPanel() {
         { startDate: string; endDate: string }
       > = {};
       propertyUsers.forEach((user: any) => {
-        initialStayPeriods[user.user_id] = stayPeriods[user.user_id] || {
-          startDate: "",
-          endDate: "",
-        };
+        // Check if there's existing stay_record data for this user
+        const existingStay = stayRecords.find(
+          (stay: any) =>
+            stay.user_id === user.user_id &&
+            stay.property_id === parseInt(propertyId)
+        );
+
+        if (existingStay) {
+          initialStayPeriods[user.user_id] = {
+            startDate: existingStay.start_date,
+            endDate: existingStay.end_date,
+          };
+        } else {
+          initialStayPeriods[user.user_id] = stayPeriods[user.user_id] || {
+            startDate: "",
+            endDate: "",
+          };
+        }
       });
       setStayPeriods(initialStayPeriods);
     } catch (error) {
@@ -229,6 +245,24 @@ export default function AdminPanel() {
         property_id: selectedProperty,
         items: ruleItems,
       });
+
+      // Save stay periods
+      const validStayPeriods = Object.entries(stayPeriods).reduce(
+        (acc, [userId, period]) => {
+          if (period.startDate && period.endDate) {
+            acc[userId] = period;
+          }
+          return acc;
+        },
+        {} as Record<string, { startDate: string; endDate: string }>
+      );
+
+      if (Object.keys(validStayPeriods).length > 0) {
+        await api.saveStayPeriods({
+          property_id: selectedProperty,
+          stay_periods: validStayPeriods,
+        });
+      }
 
       // Save utility amounts (only non-empty values)
       for (const [utility, amount] of Object.entries(utilityAmounts)) {
