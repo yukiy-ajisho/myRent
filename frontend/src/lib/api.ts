@@ -64,7 +64,11 @@ export const api = {
   },
 
   // Run bill calculation
-  runBill: (data: { property_id: string; month_start: string }) => {
+  runBill: (data: {
+    property_id: string;
+    month_start: string;
+    stay_periods?: Record<string, { startDate: string; endDate: string }>;
+  }) => {
     return apiRequest("/run-bill", {
       method: "POST",
       body: JSON.stringify(data),

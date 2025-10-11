@@ -95,6 +95,11 @@ export default function AdminPanel() {
   const [message, setMessage] = useState("");
   const [runResult, setRunResult] = useState<any>(null);
   const [dumpData, setDumpData] = useState<any>(null);
+  const [stayDays, setStayDays] = useState<Record<string, string>>({});
+  const [users, setUsers] = useState<any[]>([]);
+  const [stayPeriods, setStayPeriods] = useState<
+    Record<string, { startDate: string; endDate: string }>
+  >({});
 
   // Initialize month to current month
   useEffect(() => {
@@ -114,9 +119,54 @@ export default function AdminPanel() {
   useEffect(() => {
     if (selectedProperty && selectedMonth) {
       loadBootstrapData(selectedProperty, selectedMonth);
+      loadUsers(selectedProperty);
     }
   }, [selectedProperty, selectedMonth]);
 
+  const loadUsers = async (propertyId: string) => {
+    try {
+      console.log("Loading users for property:", propertyId);
+      // Get active tenant users for the selected property
+      const data = await api.dumpAll();
+      console.log("Dump data:", data);
+
+      const allUsers = data.app_user || [];
+      const userProperties = data.user_property || [];
+      console.log("All users:", allUsers);
+      console.log("User properties:", userProperties);
+
+      // Filter users who are active tenants and belong to this property
+      const propertyUsers = allUsers.filter((user: any) => {
+        const isActiveTenant =
+          user.active === true && user.user_type === "tenant";
+        const belongsToProperty = userProperties.some(
+          (up: any) =>
+            up.user_id === user.user_id &&
+            up.property_id === parseInt(propertyId) &&
+            up.active === true
+        );
+        return isActiveTenant && belongsToProperty;
+      });
+      console.log("Property users:", propertyUsers);
+
+      setUsers(propertyUsers);
+
+      // Initialize stay periods for these users
+      const initialStayPeriods: Record<
+        string,
+        { startDate: string; endDate: string }
+      > = {};
+      propertyUsers.forEach((user: any) => {
+        initialStayPeriods[user.user_id] = stayPeriods[user.user_id] || {
+          startDate: "",
+          endDate: "",
+        };
+      });
+      setStayPeriods(initialStayPeriods);
+    } catch (error) {
+      console.error("Error loading users:", error);
+    }
+  };
   const loadBootstrapData = async (
     propertyId?: string,
     monthStart?: string
@@ -128,11 +178,21 @@ export default function AdminPanel() {
 
       // Initialize division rules
       const rules: Record<string, string> = {};
+      console.log("Bootstrap data:", data);
+      console.log("Division rules:", data.divisionRules);
+      console.log("Property ID:", propertyId);
       data.divisionRules.forEach((rule: DivisionRule) => {
-        if (rule.property_id === propertyId) {
+        console.log(
+          "Rule:",
+          rule,
+          "Property ID match:",
+          String(rule.property_id) === String(propertyId)
+        );
+        if (String(rule.property_id) === String(propertyId)) {
           rules[rule.utility] = rule.method;
         }
       });
+      console.log("Final rules:", rules);
       setDivisionRules(rules);
 
       // Initialize utility amounts
@@ -207,6 +267,7 @@ export default function AdminPanel() {
       const result = await api.runBill({
         property_id: selectedProperty,
         month_start: selectedMonth,
+        stay_periods: stayPeriods, // Add stay periods to the request
       });
 
       setRunResult(result);
@@ -373,6 +434,79 @@ export default function AdminPanel() {
           </button>
         </div>
       </div>
+
+      {/* Stay Periods Input */}
+      {users.length > 0 && (
+        <div className="bg-white shadow rounded-lg p-6 mb-8">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">
+            Stay Periods (for bydays calculation)
+          </h2>
+          <div className="text-sm text-gray-500 mb-4">
+            Debug: Users count: {users.length}, Users:{" "}
+            {JSON.stringify(users.map((u) => u.name))}
+          </div>
+          <div className="space-y-6">
+            {users.map((user) => (
+              <div
+                key={user.user_id}
+                className="border border-gray-200 rounded-lg p-4"
+              >
+                <h3 className="text-md font-medium text-gray-900 mb-4">
+                  User: {user.name}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={stayPeriods[user.user_id]?.startDate || ""}
+                      onChange={(e) =>
+                        setStayPeriods((prev) => ({
+                          ...prev,
+                          [user.user_id]: {
+                            ...prev[user.user_id],
+                            startDate: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={stayPeriods[user.user_id]?.endDate || ""}
+                      onChange={(e) =>
+                        setStayPeriods((prev) => ({
+                          ...prev,
+                          [user.user_id]: {
+                            ...prev[user.user_id],
+                            endDate: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-gray-600">
+                  {stayPeriods[user.user_id]?.startDate &&
+                  stayPeriods[user.user_id]?.endDate
+                    ? `Period: ${stayPeriods[user.user_id].startDate} to ${
+                        stayPeriods[user.user_id].endDate
+                      }`
+                    : "Please select both start and end dates"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Run Result */}
       {runResult && (

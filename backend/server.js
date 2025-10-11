@@ -164,14 +164,14 @@ app.post("/utility-actual", async (req, res) => {
 // POST /run-bill - 請求計算実行
 app.post("/run-bill", async (req, res) => {
   try {
-    const { property_id, month_start } = req.body;
+    const { property_id, month_start, stay_periods } = req.body;
 
     if (!property_id || !month_start) {
       return res.status(400).json({ error: "Invalid request data" });
     }
 
     // Calculate bills
-    const result = await calculateBills(property_id, month_start);
+    const result = await calculateBills(property_id, month_start, stay_periods);
 
     res.json(result);
   } catch (error) {
@@ -186,6 +186,7 @@ app.get("/dump-all", async (req, res) => {
     const tables = [
       "property",
       "app_user",
+      "user_property",
       "stay_record",
       "break_record",
       "tenant_rent",
@@ -218,7 +219,11 @@ app.get("/dump-all", async (req, res) => {
 });
 
 // Calculate bills function
-async function calculateBills(property_id, month_start) {
+async function calculateBills(
+  property_id,
+  month_start,
+  manualStayPeriods = {}
+) {
   const monthEnd = new Date(month_start);
   monthEnd.setMonth(monthEnd.getMonth() + 1);
   monthEnd.setDate(0); // Last day of month
@@ -256,39 +261,77 @@ async function calculateBills(property_id, month_start) {
     .delete()
     .eq("bill_run_id", billRun.bill_run_id);
 
-  // Get stay records for the month
-  const { data: stayRecords, error: stayError } = await supabase
-    .from("stay_record")
-    .select("*")
+  // Get active tenant users for this property from user_property
+  const { data: userProperties, error: userPropsError } = await supabase
+    .from("user_property")
+    .select(
+      `
+      user_id,
+      app_user!inner(*)
+    `
+    )
     .eq("property_id", property_id)
-    .or(
-      `and(start_date.lte.${
-        monthEnd.toISOString().split("T")[0]
-      },end_date.gte.${month_start})`
-    );
+    .eq("active", true);
 
-  if (stayError) throw stayError;
+  if (userPropsError) throw userPropsError;
+
+  // Filter for active tenants
+  const propertyUsers = userProperties
+    .map((up) => up.app_user)
+    .filter((user) => user.active === true && user.user_type === "tenant");
 
   // Calculate days present for each user
   const userDays = {};
   const monthStartDate = new Date(month_start);
   const daysInMonth = monthEnd.getDate();
 
-  stayRecords.forEach((stay) => {
-    const stayStart = new Date(
-      Math.max(new Date(stay.start_date), monthStartDate)
-    );
-    const stayEnd = new Date(Math.min(new Date(stay.end_date), monthEnd));
-    const daysPresent = Math.max(
-      0,
-      Math.ceil((stayEnd - stayStart) / (1000 * 60 * 60 * 24)) + 1
-    );
+  // Use manual stay periods if provided, otherwise calculate from stay records
+  if (Object.keys(manualStayPeriods).length > 0) {
+    // Phase 2: Use manually input stay periods
+    propertyUsers.forEach((user) => {
+      const period = manualStayPeriods[user.user_id];
+      if (period && period.startDate && period.endDate) {
+        const startDate = new Date(period.startDate);
+        const endDate = new Date(period.endDate);
+        const daysPresent = Math.max(
+          0,
+          Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
+        );
+        userDays[user.user_id] = daysPresent;
+      } else {
+        userDays[user.user_id] = 0;
+      }
+    });
+  } else {
+    // Fallback: Calculate from stay records (original logic)
+    const { data: stayRecords, error: stayError } = await supabase
+      .from("stay_record")
+      .select("*")
+      .eq("property_id", property_id)
+      .or(
+        `and(start_date.lte.${
+          monthEnd.toISOString().split("T")[0]
+        },end_date.gte.${month_start})`
+      );
 
-    if (!userDays[stay.user_id]) {
-      userDays[stay.user_id] = 0;
-    }
-    userDays[stay.user_id] += daysPresent;
-  });
+    if (stayError) throw stayError;
+
+    stayRecords.forEach((stay) => {
+      const stayStart = new Date(
+        Math.max(new Date(stay.start_date), monthStartDate)
+      );
+      const stayEnd = new Date(Math.min(new Date(stay.end_date), monthEnd));
+      const daysPresent = Math.max(
+        0,
+        Math.ceil((stayEnd - stayStart) / (1000 * 60 * 60 * 24)) + 1
+      );
+
+      if (!userDays[stay.user_id]) {
+        userDays[stay.user_id] = 0;
+      }
+      userDays[stay.user_id] += daysPresent;
+    });
+  }
 
   const headcount = Object.keys(userDays).length;
   const totalPersonDays = Object.values(userDays).reduce(
@@ -376,7 +419,7 @@ async function calculateBills(property_id, month_start) {
         detail_json: { method },
       });
     } else if (method === "equalshare") {
-      // Equal share
+      // Equal share - divide equally among active tenants
       const perPerson = Math.round((amount / headcount) * 100) / 100;
 
       Object.keys(userDays).forEach((userId) => {
@@ -389,23 +432,34 @@ async function calculateBills(property_id, month_start) {
         });
       });
     } else if (method === "bydays") {
-      // By days
-      Object.entries(userDays).forEach(([userId, days]) => {
-        const userAmount =
-          Math.round(((amount * days) / totalPersonDays) * 100) / 100;
-
+      // By days - divide proportionally by stay days
+      if (totalPersonDays === 0) {
+        // No days - assign to house account
         billLines.push({
           bill_run_id: billRun.bill_run_id,
-          user_id: userId,
+          user_id: null,
           utility: actual.utility,
-          amount: userAmount,
-          detail_json: {
-            method,
-            days_present: days,
-            total_person_days: totalPersonDays,
-          },
+          amount: amount,
+          detail_json: { method, reason: "no_days" },
         });
-      });
+      } else {
+        Object.entries(userDays).forEach(([userId, days]) => {
+          const userAmount =
+            Math.round(((amount * days) / totalPersonDays) * 100) / 100;
+
+          billLines.push({
+            bill_run_id: billRun.bill_run_id,
+            user_id: userId,
+            utility: actual.utility,
+            amount: userAmount,
+            detail_json: {
+              method,
+              days_present: days,
+              total_person_days: totalPersonDays,
+            },
+          });
+        });
+      }
     }
 
     totalUtilities += amount;
@@ -428,6 +482,9 @@ async function calculateBills(property_id, month_start) {
       utilities: totalUtilities,
       grand_total: totalRent + totalUtilities,
     },
+    user_days: userDays,
+    headcount: headcount,
+    total_person_days: totalPersonDays,
   };
 }
 
