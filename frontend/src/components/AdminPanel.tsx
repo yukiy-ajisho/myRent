@@ -100,6 +100,9 @@ export default function AdminPanel() {
   const [stayPeriods, setStayPeriods] = useState<
     Record<string, { startDate: string; endDate: string }>
   >({});
+  const [breakPeriods, setBreakPeriods] = useState<
+    Record<string, Array<{ breakStart: string; breakEnd: string }>>
+  >({});
   const [rentAmounts, setRentAmounts] = useState<Record<string, number>>({});
 
   // Initialize month to current month
@@ -134,6 +137,7 @@ export default function AdminPanel() {
       const allUsers = data.app_user || [];
       const userProperties = data.user_property || [];
       const stayRecords = data.stay_record || [];
+      const breakRecords = data.break_record || [];
       const tenantRents = data.tenant_rent || [];
       console.log("All users:", allUsers);
       console.log("User properties:", userProperties);
@@ -181,6 +185,37 @@ export default function AdminPanel() {
         }
       });
       setStayPeriods(initialStayPeriods);
+
+      // Initialize break periods for these users
+      const initialBreakPeriods: Record<
+        string,
+        Array<{ breakStart: string; breakEnd: string }>
+      > = {};
+      propertyUsers.forEach((user: any) => {
+        // Check if there are existing break_record data for this user
+        // Match break_record with stay_record to get user and property info
+        const existingBreaks = breakRecords.filter((breakRecord: any) => {
+          const stayRecord = stayRecords.find(
+            (stay: any) =>
+              stay.stay_id === breakRecord.stay_id &&
+              stay.user_id === user.user_id &&
+              stay.property_id === parseInt(propertyId)
+          );
+          return stayRecord !== undefined;
+        });
+
+        if (existingBreaks.length > 0) {
+          initialBreakPeriods[user.user_id] = existingBreaks.map(
+            (breakRecord: any) => ({
+              breakStart: breakRecord.break_start,
+              breakEnd: breakRecord.break_end,
+            })
+          );
+        } else {
+          initialBreakPeriods[user.user_id] = breakPeriods[user.user_id] || [];
+        }
+      });
+      setBreakPeriods(initialBreakPeriods);
 
       // Initialize rent amounts for these users
       const initialRentAmounts: Record<string, number> = {};
@@ -266,7 +301,7 @@ export default function AdminPanel() {
         items: ruleItems,
       });
 
-      // Save stay periods
+      // Save stay periods and break periods
       const validStayPeriods = Object.entries(stayPeriods).reduce(
         (acc, [userId, period]) => {
           if (period.startDate && period.endDate) {
@@ -277,10 +312,24 @@ export default function AdminPanel() {
         {} as Record<string, { startDate: string; endDate: string }>
       );
 
+      const validBreakPeriods = Object.entries(breakPeriods).reduce(
+        (acc, [userId, breaks]) => {
+          const validBreaks = breaks.filter(
+            (breakPeriod) => breakPeriod.breakStart && breakPeriod.breakEnd
+          );
+          if (validBreaks.length > 0) {
+            acc[userId] = validBreaks;
+          }
+          return acc;
+        },
+        {} as Record<string, Array<{ breakStart: string; breakEnd: string }>>
+      );
+
       if (Object.keys(validStayPeriods).length > 0) {
         await api.saveStayPeriods({
           property_id: selectedProperty,
           stay_periods: validStayPeriods,
+          break_periods: validBreakPeriods,
         });
       }
 
@@ -373,6 +422,36 @@ export default function AdminPanel() {
     } catch (error) {
       console.error("Error signing out:", error);
     }
+  };
+
+  // Break period management functions
+  const addBreakPeriod = (userId: string) => {
+    setBreakPeriods((prev) => ({
+      ...prev,
+      [userId]: [...(prev[userId] || []), { breakStart: "", breakEnd: "" }],
+    }));
+  };
+
+  const removeBreakPeriod = (userId: string, index: number) => {
+    setBreakPeriods((prev) => ({
+      ...prev,
+      [userId]: prev[userId]?.filter((_, i) => i !== index) || [],
+    }));
+  };
+
+  const updateBreakPeriod = (
+    userId: string,
+    index: number,
+    field: "breakStart" | "breakEnd",
+    value: string
+  ) => {
+    setBreakPeriods((prev) => ({
+      ...prev,
+      [userId]:
+        prev[userId]?.map((period, i) =>
+          i === index ? { ...period, [field]: value } : period
+        ) || [],
+    }));
   };
 
   return (
@@ -573,6 +652,82 @@ export default function AdminPanel() {
                         stayPeriods[user.user_id].endDate
                       }`
                     : "Please select both start and end dates"}
+                </div>
+
+                {/* Break Periods */}
+                <div className="mt-6">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-medium text-gray-700">
+                      Break Periods
+                    </h4>
+                    <button
+                      onClick={() => addBreakPeriod(user.user_id)}
+                      className="px-3 py-1 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700"
+                    >
+                      Add Break
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {(breakPeriods[user.user_id] || []).map(
+                      (breakPeriod, index) => (
+                        <div
+                          key={index}
+                          className="flex gap-2 items-end p-3 bg-gray-50 rounded-md"
+                        >
+                          <div className="flex-1">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Break Start
+                            </label>
+                            <input
+                              type="date"
+                              value={breakPeriod.breakStart}
+                              onChange={(e) =>
+                                updateBreakPeriod(
+                                  user.user_id,
+                                  index,
+                                  "breakStart",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Break End
+                            </label>
+                            <input
+                              type="date"
+                              value={breakPeriod.breakEnd}
+                              onChange={(e) =>
+                                updateBreakPeriod(
+                                  user.user_id,
+                                  index,
+                                  "breakEnd",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <button
+                            onClick={() =>
+                              removeBreakPeriod(user.user_id, index)
+                            }
+                            className="px-2 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )
+                    )}
+                    {(!breakPeriods[user.user_id] ||
+                      breakPeriods[user.user_id].length === 0) && (
+                      <div className="text-sm text-gray-500 italic">
+                        No break periods added yet
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

@@ -133,7 +133,7 @@ app.post("/save-division-rules", async (req, res) => {
 // POST /save-stay-periods - 滞在期間保存
 app.post("/save-stay-periods", async (req, res) => {
   try {
-    const { property_id, stay_periods } = req.body;
+    const { property_id, stay_periods, break_periods } = req.body;
 
     if (!property_id || !stay_periods) {
       return res.status(400).json({ error: "Invalid request data" });
@@ -141,6 +141,18 @@ app.post("/save-stay-periods", async (req, res) => {
 
     // Delete existing stay records for this property
     await supabase.from("stay_record").delete().eq("property_id", property_id);
+
+    // Delete existing break records for this property
+    // First get stay_ids for this property, then delete break_records
+    const { data: existingStayRecords } = await supabase
+      .from("stay_record")
+      .select("stay_id")
+      .eq("property_id", property_id);
+
+    if (existingStayRecords && existingStayRecords.length > 0) {
+      const stayIds = existingStayRecords.map((sr) => sr.stay_id);
+      await supabase.from("break_record").delete().in("stay_id", stayIds);
+    }
 
     // Insert new stay records
     const stayRecords = Object.entries(stay_periods).map(
@@ -160,7 +172,53 @@ app.post("/save-stay-periods", async (req, res) => {
       if (insertError) throw insertError;
     }
 
-    res.json({ ok: true, records_saved: stayRecords.length });
+    // Insert new break records
+    if (break_periods && Object.keys(break_periods).length > 0) {
+      const breakRecords = [];
+
+      // Get the stay_ids from the newly inserted stay records
+      const { data: newStayRecords, error: staySelectError } = await supabase
+        .from("stay_record")
+        .select("stay_id, user_id")
+        .eq("property_id", property_id);
+
+      if (staySelectError) throw staySelectError;
+
+      // Create a map of user_id to stay_id
+      const userToStayId = {};
+      newStayRecords.forEach((stay) => {
+        userToStayId[stay.user_id] = stay.stay_id;
+      });
+
+      Object.entries(break_periods).forEach(([user_id, breaks]) => {
+        const stay_id = userToStayId[user_id];
+        if (stay_id) {
+          breaks.forEach((breakPeriod) => {
+            breakRecords.push({
+              stay_id,
+              break_start: breakPeriod.breakStart,
+              break_end: breakPeriod.breakEnd,
+            });
+          });
+        }
+      });
+
+      if (breakRecords.length > 0) {
+        const { error: breakInsertError } = await supabase
+          .from("break_record")
+          .insert(breakRecords);
+
+        if (breakInsertError) throw breakInsertError;
+      }
+    }
+
+    res.json({
+      ok: true,
+      stay_records_saved: stayRecords.length,
+      break_records_saved: break_periods
+        ? Object.values(break_periods).flat().length
+        : 0,
+    });
   } catch (error) {
     console.error("Save stay periods error:", error);
     res.status(500).json({ error: "Failed to save stay periods" });
@@ -371,10 +429,25 @@ async function calculateBills(
       if (period && period.startDate && period.endDate) {
         const startDate = new Date(period.startDate);
         const endDate = new Date(period.endDate);
-        const daysPresent = Math.max(
+        let daysPresent = Math.max(
           0,
           Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
         );
+
+        // Subtract break periods
+        const userBreaks = manualStayPeriods[user.user_id]?.breaks || [];
+        userBreaks.forEach((breakPeriod) => {
+          if (breakPeriod.breakStart && breakPeriod.breakEnd) {
+            const breakStart = new Date(breakPeriod.breakStart);
+            const breakEnd = new Date(breakPeriod.breakEnd);
+            const breakDays = Math.max(
+              0,
+              Math.ceil((breakEnd - breakStart) / (1000 * 60 * 60 * 24)) + 1
+            );
+            daysPresent = Math.max(0, daysPresent - breakDays);
+          }
+        });
+
         userDays[user.user_id] = daysPresent;
       } else {
         userDays[user.user_id] = 0;
@@ -394,15 +467,50 @@ async function calculateBills(
 
     if (stayError) throw stayError;
 
+    // Get break records
+    const { data: breakRecords, error: breakError } = await supabase
+      .from("break_record")
+      .select(
+        `
+        *,
+        stay_record!inner(property_id)
+      `
+      )
+      .eq("stay_record.property_id", property_id);
+
+    if (breakError) throw breakError;
+
     stayRecords.forEach((stay) => {
       const stayStart = new Date(
         Math.max(new Date(stay.start_date), monthStartDate)
       );
       const stayEnd = new Date(Math.min(new Date(stay.end_date), monthEnd));
-      const daysPresent = Math.max(
+      let daysPresent = Math.max(
         0,
         Math.ceil((stayEnd - stayStart) / (1000 * 60 * 60 * 24)) + 1
       );
+
+      // Subtract break periods for this user
+      const userBreaks = breakRecords.filter(
+        (breakRecord) => breakRecord.stay_id === stay.stay_id
+      );
+
+      userBreaks.forEach((breakRecord) => {
+        const breakStart = new Date(
+          Math.max(new Date(breakRecord.break_start), stayStart)
+        );
+        const breakEnd = new Date(
+          Math.min(new Date(breakRecord.break_end), stayEnd)
+        );
+
+        if (breakStart <= breakEnd) {
+          const breakDays = Math.max(
+            0,
+            Math.ceil((breakEnd - breakStart) / (1000 * 60 * 60 * 24)) + 1
+          );
+          daysPresent = Math.max(0, daysPresent - breakDays);
+        }
+      });
 
       if (!userDays[stay.user_id]) {
         userDays[stay.user_id] = 0;

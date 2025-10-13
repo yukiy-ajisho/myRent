@@ -54,6 +54,10 @@ export const api = {
   saveStayPeriods: (data: {
     property_id: string;
     stay_periods: Record<string, { startDate: string; endDate: string }>;
+    break_periods?: Record<
+      string,
+      Array<{ breakStart: string; breakEnd: string }>
+    >;
   }) => {
     return apiRequest("/save-stay-periods", {
       method: "POST",
