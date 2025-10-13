@@ -100,6 +100,7 @@ export default function AdminPanel() {
   const [stayPeriods, setStayPeriods] = useState<
     Record<string, { startDate: string; endDate: string }>
   >({});
+  const [rentAmounts, setRentAmounts] = useState<Record<string, number>>({});
 
   // Initialize month to current month
   useEffect(() => {
@@ -133,21 +134,22 @@ export default function AdminPanel() {
       const allUsers = data.app_user || [];
       const userProperties = data.user_property || [];
       const stayRecords = data.stay_record || [];
+      const tenantRents = data.tenant_rent || [];
       console.log("All users:", allUsers);
       console.log("User properties:", userProperties);
       console.log("Stay records:", stayRecords);
+      console.log("Tenant rents:", tenantRents);
 
       // Filter users who are active tenants and belong to this property
       const propertyUsers = allUsers.filter((user: any) => {
-        const isActiveTenant =
-          user.active === true && user.user_type === "tenant";
+        const isTenant = user.user_type === "tenant";
         const belongsToProperty = userProperties.some(
           (up: any) =>
             up.user_id === user.user_id &&
             up.property_id === parseInt(propertyId) &&
             up.active === true
         );
-        return isActiveTenant && belongsToProperty;
+        return isTenant && belongsToProperty;
       });
       console.log("Property users:", propertyUsers);
 
@@ -179,6 +181,24 @@ export default function AdminPanel() {
         }
       });
       setStayPeriods(initialStayPeriods);
+
+      // Initialize rent amounts for these users
+      const initialRentAmounts: Record<string, number> = {};
+      propertyUsers.forEach((user: any) => {
+        // Check if there's existing tenant_rent data for this user
+        const existingRent = tenantRents.find(
+          (rent: any) =>
+            rent.user_id === user.user_id &&
+            rent.property_id === parseInt(propertyId)
+        );
+
+        if (existingRent) {
+          initialRentAmounts[user.user_id] = existingRent.monthly_rent;
+        } else {
+          initialRentAmounts[user.user_id] = rentAmounts[user.user_id] || 0;
+        }
+      });
+      setRentAmounts(initialRentAmounts);
     } catch (error) {
       console.error("Error loading users:", error);
     }
@@ -274,6 +294,24 @@ export default function AdminPanel() {
             amount: parseFloat(amount),
           });
         }
+      }
+
+      // Save rent amounts (only non-zero values)
+      const validRentAmounts = Object.entries(rentAmounts).reduce(
+        (acc, [userId, amount]) => {
+          if (amount && amount > 0) {
+            acc[userId] = amount;
+          }
+          return acc;
+        },
+        {} as Record<string, number>
+      );
+
+      if (Object.keys(validRentAmounts).length > 0) {
+        await api.saveRent({
+          property_id: selectedProperty,
+          rent_amounts: validRentAmounts,
+        });
       }
 
       setMessage("Settings saved successfully");
@@ -535,6 +573,57 @@ export default function AdminPanel() {
                         stayPeriods[user.user_id].endDate
                       }`
                     : "Please select both start and end dates"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Rent Section */}
+      {users.length > 0 && (
+        <div className="bg-white shadow rounded-lg p-6 mb-8">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">
+            Rent (Fixed amount per user)
+          </h2>
+          <div className="text-sm text-gray-500 mb-4">
+            Debug: Users count: {users.length}, Users:{" "}
+            {JSON.stringify(users.map((u) => u.name))}
+          </div>
+          <div className="space-y-6">
+            {users.map((user) => (
+              <div
+                key={user.user_id}
+                className="border border-gray-200 rounded-lg p-4"
+              >
+                <h3 className="text-md font-medium text-gray-900 mb-4">
+                  User: {user.name}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Monthly Rent
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={rentAmounts[user.user_id] || ""}
+                      onChange={(e) =>
+                        setRentAmounts((prev) => ({
+                          ...prev,
+                          [user.user_id]: parseFloat(e.target.value) || 0,
+                        }))
+                      }
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-gray-600">
+                  {rentAmounts[user.user_id] && rentAmounts[user.user_id] > 0
+                    ? `Monthly Rent: $${rentAmounts[user.user_id].toFixed(2)}`
+                    : "Please enter monthly rent amount"}
                 </div>
               </div>
             ))}

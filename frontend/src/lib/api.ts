@@ -74,6 +74,17 @@ export const api = {
     });
   },
 
+  // Save rent
+  saveRent: (data: {
+    property_id: string;
+    rent_amounts: Record<string, number>;
+  }) => {
+    return apiRequest("/save-rent", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
   // Run bill calculation
   runBill: (data: {
     property_id: string;

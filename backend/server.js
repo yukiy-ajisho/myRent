@@ -167,6 +167,41 @@ app.post("/save-stay-periods", async (req, res) => {
   }
 });
 
+// POST /save-rent - 家賃保存
+app.post("/save-rent", async (req, res) => {
+  try {
+    const { property_id, rent_amounts } = req.body;
+
+    if (!property_id || !rent_amounts) {
+      return res.status(400).json({ error: "Invalid request data" });
+    }
+
+    // Upsert rent records for each user
+    const rentRecords = Object.entries(rent_amounts).map(
+      ([user_id, monthly_rent]) => ({
+        user_id,
+        property_id: parseInt(property_id),
+        monthly_rent,
+      })
+    );
+
+    if (rentRecords.length > 0) {
+      const { error: upsertError } = await supabase
+        .from("tenant_rent")
+        .upsert(rentRecords, {
+          onConflict: "user_id,property_id",
+        });
+
+      if (upsertError) throw upsertError;
+    }
+
+    res.json({ ok: true, records_saved: rentRecords.length });
+  } catch (error) {
+    console.error("Save rent error:", error);
+    res.status(500).json({ error: "Failed to save rent" });
+  }
+});
+
 // POST /utility-actual - ユーティリティ実績保存
 app.post("/utility-actual", async (req, res) => {
   try {
@@ -310,12 +345,18 @@ async function calculateBills(
     .eq("property_id", property_id)
     .eq("active", true);
 
-  if (userPropsError) throw userPropsError;
+  console.log("=== DEBUG: User Properties ===");
+  console.log("Property ID:", property_id);
+  console.log("User Properties:", JSON.stringify(userProperties, null, 2));
 
   // Filter for active tenants
   const propertyUsers = userProperties
     .map((up) => up.app_user)
-    .filter((user) => user.active === true && user.user_type === "tenant");
+    .filter((user) => user.user_type === "tenant");
+
+  console.log("=== DEBUG: Property Users ===");
+  console.log("Property Users:", JSON.stringify(propertyUsers, null, 2));
+  console.log("Property Users Count:", propertyUsers.length);
 
   // Calculate days present for each user
   const userDays = {};
@@ -402,9 +443,7 @@ async function calculateBills(
   const { data: tenantRents, error: rentsError } = await supabase
     .from("tenant_rent")
     .select("*")
-    .eq("property_id", property_id)
-    .lte("start_date", month_start)
-    .gte("end_date", month_start);
+    .eq("property_id", property_id);
 
   if (rentsError) throw rentsError;
 
@@ -414,22 +453,19 @@ async function calculateBills(
 
   // Process rent
   tenantRents.forEach((rent) => {
-    const daysPresent = userDays[rent.user_id] || 0;
-    const rentAmount =
-      Math.round(((rent.monthly_rent * daysPresent) / daysInMonth) * 100) / 100;
-
+    // Fixed method - assign full monthly rent to each user
     billLines.push({
       bill_run_id: billRun.bill_run_id,
       user_id: rent.user_id,
       utility: "rent",
-      amount: rentAmount,
+      amount: rent.monthly_rent,
       detail_json: {
-        days_present: daysPresent,
+        method: "fixed",
         monthly_rent: rent.monthly_rent,
       },
     });
 
-    totalRent += rentAmount;
+    totalRent += rent.monthly_rent;
   });
 
   // Process utilities
