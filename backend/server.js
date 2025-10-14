@@ -536,6 +536,9 @@ async function calculateBills(
 
     // Calculate total break days in this month
     let totalBreakDays = 0;
+
+    // First, collect all break periods that overlap with the billing month
+    const breakPeriods = [];
     userBreakRecords.forEach((breakRecord) => {
       const breakStart = new Date(breakRecord.break_start);
       const breakEnd = new Date(breakRecord.break_end);
@@ -545,13 +548,40 @@ async function calculateBills(
       const breakOverlapEnd = new Date(Math.min(breakEnd, monthEnd));
 
       if (breakOverlapStart <= breakOverlapEnd) {
-        const breakDays =
-          Math.ceil(
-            (breakOverlapEnd - breakOverlapStart) / (1000 * 60 * 60 * 24)
-          ) + 1;
-        totalBreakDays += breakDays;
+        breakPeriods.push({
+          start: breakOverlapStart,
+          end: breakOverlapEnd,
+        });
       }
     });
+
+    // Merge overlapping break periods to avoid double counting
+    if (breakPeriods.length > 0) {
+      // Sort by start date
+      breakPeriods.sort((a, b) => a.start - b.start);
+
+      // Merge overlapping periods
+      const mergedPeriods = [breakPeriods[0]];
+      for (let i = 1; i < breakPeriods.length; i++) {
+        const current = breakPeriods[i];
+        const last = mergedPeriods[mergedPeriods.length - 1];
+
+        if (current.start <= last.end) {
+          // Overlapping periods - merge them
+          last.end = new Date(Math.max(last.end, current.end));
+        } else {
+          // Non-overlapping periods - add as new period
+          mergedPeriods.push(current);
+        }
+      }
+
+      // Calculate total break days from merged periods
+      mergedPeriods.forEach((period) => {
+        const breakDays =
+          Math.ceil((period.end - period.start) / (1000 * 60 * 60 * 24)) + 1;
+        totalBreakDays += breakDays;
+      });
+    }
 
     // Subtract break days from total days
     daysPresent = Math.max(0, daysPresent - totalBreakDays);
