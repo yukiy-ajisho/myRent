@@ -150,9 +150,11 @@ export default function AdminPanel() {
         const belongsToProperty = userProperties.some(
           (up: any) =>
             up.user_id === user.user_id &&
-            up.property_id === parseInt(propertyId) &&
-            up.active === true
+            up.property_id === parseInt(propertyId)
         );
+
+        // For now, just check if user is tenant and belongs to property
+        // We'll add stay_record check later
         return isTenant && belongsToProperty;
       });
       console.log("Property users:", propertyUsers);
@@ -304,12 +306,17 @@ export default function AdminPanel() {
       // Save stay periods and break periods
       const validStayPeriods = Object.entries(stayPeriods).reduce(
         (acc, [userId, period]) => {
-          if (period.startDate && period.endDate) {
-            acc[userId] = period;
+          if (period.startDate) {
+            // Send endDate as is - null if not provided
+            const processedPeriod = {
+              startDate: period.startDate,
+              endDate: period.endDate || null,
+            };
+            acc[userId] = processedPeriod;
           }
           return acc;
         },
-        {} as Record<string, { startDate: string; endDate: string }>
+        {} as Record<string, { startDate: string; endDate: string | null }>
       );
 
       const validBreakPeriods = Object.entries(breakPeriods).reduce(

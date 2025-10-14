@@ -354,9 +354,21 @@ async function calculateBills(
   month_start,
   manualStayPeriods = {}
 ) {
-  const monthEnd = new Date(month_start);
-  monthEnd.setMonth(monthEnd.getMonth() + 1);
-  monthEnd.setDate(0); // Last day of month
+  console.log(`=== DEBUG: calculateBills ===`);
+  console.log(`Property ID: ${property_id}`);
+  console.log(`Month Start: ${month_start}`);
+
+  // Fix monthEnd calculation - use correct method
+  console.log("month_start raw:", month_start); // 文字列
+  const ms = new Date(month_start); // ここはUTC解釈
+  console.log("parsed month_start:", ms.toISOString(), ms.getTime());
+
+  const year = ms.getUTCFullYear(); // UTCで統一
+  const month = ms.getUTCMonth(); // 0=Jan … 9=Oct
+  const monthEnd = new Date(Date.UTC(year, month + 1, 0)); // ← 月末（UTC）
+  console.log("monthEnd (UTC):", monthEnd.toISOString(), monthEnd.getTime());
+
+  console.log(`Calculated Month End: ${monthEnd.toISOString().split("T")[0]}`);
 
   // Get or create bill_run
   let { data: billRun, error: billRunError } = await supabase
@@ -391,7 +403,8 @@ async function calculateBills(
     .delete()
     .eq("bill_run_id", billRun.bill_run_id);
 
-  // Get active tenant users for this property from user_property
+  // Get active tenant users for this property
+  // First get users from user_property, then check if they are active based on stay_record
   const { data: userProperties, error: userPropsError } = await supabase
     .from("user_property")
     .select(
@@ -400,123 +413,120 @@ async function calculateBills(
       app_user!inner(*)
     `
     )
-    .eq("property_id", property_id)
-    .eq("active", true);
+    .eq("property_id", property_id);
 
-  console.log("=== DEBUG: User Properties ===");
-  console.log("Property ID:", property_id);
-  console.log("User Properties:", JSON.stringify(userProperties, null, 2));
+  if (userPropsError) throw userPropsError;
 
-  // Filter for active tenants
+  // Get stay records for these users to check if they are active
+  const userIds = userProperties.map((up) => up.user_id);
+  const { data: stayRecords, error: stayError } = await supabase
+    .from("stay_record")
+    .select("*")
+    .in("user_id", userIds)
+    .eq("property_id", property_id);
+
+  if (stayError) throw stayError;
+
+  // Filter for active tenants based on stay_record dates
+  const now = new Date();
   const propertyUsers = userProperties
     .map((up) => up.app_user)
-    .filter((user) => user.user_type === "tenant");
-
-  console.log("=== DEBUG: Property Users ===");
-  console.log("Property Users:", JSON.stringify(propertyUsers, null, 2));
-  console.log("Property Users Count:", propertyUsers.length);
+    .filter((user) => {
+      const isTenant = user.user_type === "tenant";
+      const stayRecord = stayRecords.find((sr) => sr.user_id === user.user_id);
+      const isActive =
+        stayRecord &&
+        new Date(stayRecord.start_date) <= now &&
+        (!stayRecord.end_date || new Date(stayRecord.end_date) >= now);
+      return isTenant && isActive;
+    });
 
   // Calculate days present for each user
   const userDays = {};
-  const monthStartDate = new Date(month_start);
   const daysInMonth = monthEnd.getDate();
 
-  // Use manual stay periods if provided, otherwise calculate from stay records
-  if (Object.keys(manualStayPeriods).length > 0) {
-    // Phase 2: Use manually input stay periods
-    propertyUsers.forEach((user) => {
-      const period = manualStayPeriods[user.user_id];
-      if (period && period.startDate && period.endDate) {
-        const startDate = new Date(period.startDate);
-        const endDate = new Date(period.endDate);
-        let daysPresent = Math.max(
-          0,
-          Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
-        );
+  // Calculate days present for each user based on stay_record and break_record
+  for (const user of propertyUsers) {
+    const stayRecord = stayRecords.find((sr) => sr.user_id === user.user_id);
+    if (!stayRecord) {
+      userDays[user.user_id] = 0;
+      continue;
+    }
 
-        // Subtract break periods
-        const userBreaks = manualStayPeriods[user.user_id]?.breaks || [];
-        userBreaks.forEach((breakPeriod) => {
-          if (breakPeriod.breakStart && breakPeriod.breakEnd) {
-            const breakStart = new Date(breakPeriod.breakStart);
-            const breakEnd = new Date(breakPeriod.breakEnd);
-            const breakDays = Math.max(
-              0,
-              Math.ceil((breakEnd - breakStart) / (1000 * 60 * 60 * 24)) + 1
-            );
-            daysPresent = Math.max(0, daysPresent - breakDays);
-          }
-        });
+    // Calculate actual stay period for this month
+    const entryDate = new Date(stayRecord.start_date); // 入居日
+    let exitDate;
 
-        userDays[user.user_id] = daysPresent;
-      } else {
-        userDays[user.user_id] = 0;
-      }
-    });
-  } else {
-    // Fallback: Calculate from stay records (original logic)
-    const { data: stayRecords, error: stayError } = await supabase
-      .from("stay_record")
-      .select("*")
-      .eq("property_id", property_id)
-      .or(
-        `and(start_date.lte.${
-          monthEnd.toISOString().split("T")[0]
-        },end_date.gte.${month_start})`
-      );
+    // If end_date is null or invalid, set it to the last day of the billing month
+    if (
+      !stayRecord.end_date ||
+      isNaN(new Date(stayRecord.end_date).getTime())
+    ) {
+      // Set to the last day of the billing month for ongoing stays
+      exitDate = new Date(monthEnd);
+    } else {
+      exitDate = new Date(stayRecord.end_date);
+    }
 
-    if (stayError) throw stayError;
+    // Calculate overlap with the billing month
+    const actualStart = new Date(Math.max(entryDate, ms));
+    const actualEnd = new Date(Math.min(exitDate, monthEnd));
 
-    // Get break records
-    const { data: breakRecords, error: breakError } = await supabase
+    // Basic days present in this month
+    let daysPresent = Math.max(
+      0,
+      Math.ceil((actualEnd - actualStart) / (1000 * 60 * 60 * 24)) + 1
+    );
+
+    // Get break records for this user
+    const { data: userBreakRecords, error: breakError } = await supabase
       .from("break_record")
-      .select(
-        `
-        *,
-        stay_record!inner(property_id)
-      `
-      )
-      .eq("stay_record.property_id", property_id);
+      .select("*")
+      .eq("stay_id", stayRecord.stay_id);
 
-    if (breakError) throw breakError;
+    if (breakError) {
+      console.error("Error fetching break records:", breakError);
+      userDays[user.user_id] = daysPresent;
+      continue;
+    }
 
-    stayRecords.forEach((stay) => {
-      const stayStart = new Date(
-        Math.max(new Date(stay.start_date), monthStartDate)
-      );
-      const stayEnd = new Date(Math.min(new Date(stay.end_date), monthEnd));
-      let daysPresent = Math.max(
-        0,
-        Math.ceil((stayEnd - stayStart) / (1000 * 60 * 60 * 24)) + 1
-      );
+    // Calculate total break days in this month
+    let totalBreakDays = 0;
+    userBreakRecords.forEach((breakRecord) => {
+      const breakStart = new Date(breakRecord.break_start);
+      const breakEnd = new Date(breakRecord.break_end);
 
-      // Subtract break periods for this user
-      const userBreaks = breakRecords.filter(
-        (breakRecord) => breakRecord.stay_id === stay.stay_id
-      );
+      // Calculate overlap between break period and billing month
+      const breakOverlapStart = new Date(Math.max(breakStart, ms));
+      const breakOverlapEnd = new Date(Math.min(breakEnd, monthEnd));
 
-      userBreaks.forEach((breakRecord) => {
-        const breakStart = new Date(
-          Math.max(new Date(breakRecord.break_start), stayStart)
-        );
-        const breakEnd = new Date(
-          Math.min(new Date(breakRecord.break_end), stayEnd)
-        );
-
-        if (breakStart <= breakEnd) {
-          const breakDays = Math.max(
-            0,
-            Math.ceil((breakEnd - breakStart) / (1000 * 60 * 60 * 24)) + 1
-          );
-          daysPresent = Math.max(0, daysPresent - breakDays);
-        }
-      });
-
-      if (!userDays[stay.user_id]) {
-        userDays[stay.user_id] = 0;
+      if (breakOverlapStart <= breakOverlapEnd) {
+        const breakDays =
+          Math.ceil(
+            (breakOverlapEnd - breakOverlapStart) / (1000 * 60 * 60 * 24)
+          ) + 1;
+        totalBreakDays += breakDays;
       }
-      userDays[stay.user_id] += daysPresent;
     });
+
+    // Subtract break days from total days
+    daysPresent = Math.max(0, daysPresent - totalBreakDays);
+    userDays[user.user_id] = daysPresent;
+
+    console.log(`=== DEBUG: User ${user.user_id} ===`);
+    console.log(`Entry Date: ${entryDate.toISOString().split("T")[0]}`);
+    console.log(`Exit Date: ${exitDate.toISOString().split("T")[0]}`);
+    console.log(`Month Start: ${ms.toISOString().split("T")[0]}`);
+    console.log(`Month End: ${monthEnd.toISOString().split("T")[0]}`);
+    console.log(`Actual Start: ${actualStart.toISOString().split("T")[0]}`);
+    console.log(`Actual End: ${actualEnd.toISOString().split("T")[0]}`);
+    console.log(
+      `Basic days present: ${
+        Math.ceil((actualEnd - actualStart) / (1000 * 60 * 60 * 24)) + 1
+      }`
+    );
+    console.log(`Total break days: ${totalBreakDays}`);
+    console.log(`Final days present: ${daysPresent}`);
   }
 
   const headcount = Object.keys(userDays).length;
