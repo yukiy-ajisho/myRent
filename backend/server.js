@@ -419,6 +419,10 @@ async function calculateBills(
 
   // Get stay records for these users to check if they are active
   const userIds = userProperties.map((up) => up.user_id);
+  console.log("=== DEBUG: stay_record query ===");
+  console.log("User IDs:", userIds);
+  console.log("Property ID:", property_id);
+
   const { data: stayRecords, error: stayError } = await supabase
     .from("stay_record")
     .select("*")
@@ -427,19 +431,59 @@ async function calculateBills(
 
   if (stayError) throw stayError;
 
+  console.log("Stay Records found:", stayRecords.length);
+  stayRecords.forEach((record) => {
+    console.log(
+      `User ${record.user_id}: start_date=${record.start_date}, end_date=${record.end_date}`
+    );
+  });
+
   // Filter for active tenants based on stay_record dates
   const now = new Date();
+  console.log("=== DEBUG: Active user filtering ===");
+  console.log("Current time:", now.toISOString());
+  console.log("Billing month start:", ms.toISOString());
+  console.log("Billing month end:", monthEnd.toISOString());
+
   const propertyUsers = userProperties
     .map((up) => up.app_user)
     .filter((user) => {
       const isTenant = user.user_type === "tenant";
       const stayRecord = stayRecords.find((sr) => sr.user_id === user.user_id);
+
+      // Check if user was active during the billing month
       const isActive =
         stayRecord &&
-        new Date(stayRecord.start_date) <= now &&
-        (!stayRecord.end_date || new Date(stayRecord.end_date) >= now);
+        // User started before or during the billing month
+        new Date(stayRecord.start_date) <= monthEnd &&
+        // User ended after or during the billing month (or is still active)
+        (!stayRecord.end_date || new Date(stayRecord.end_date) >= ms);
+
+      console.log(
+        `User ${
+          user.user_id
+        }: isTenant=${isTenant}, hasStayRecord=${!!stayRecord}, isActive=${isActive}`
+      );
+      if (stayRecord) {
+        console.log(
+          `  start_date: ${stayRecord.start_date}, end_date: ${stayRecord.end_date}`
+        );
+        console.log(
+          `  start_date <= monthEnd: ${
+            new Date(stayRecord.start_date) <= monthEnd
+          }`
+        );
+        console.log(
+          `  end_date >= monthStart: ${
+            !stayRecord.end_date || new Date(stayRecord.end_date) >= ms
+          }`
+        );
+      }
+
       return isTenant && isActive;
     });
+
+  console.log("Active users found:", propertyUsers.length);
 
   // Calculate days present for each user
   const userDays = {};
