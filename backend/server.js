@@ -543,9 +543,9 @@ async function calculateBills(
       const breakStart = new Date(breakRecord.break_start);
       const breakEnd = new Date(breakRecord.break_end);
 
-      // Calculate overlap between break period and billing month
-      const breakOverlapStart = new Date(Math.max(breakStart, ms));
-      const breakOverlapEnd = new Date(Math.min(breakEnd, monthEnd));
+      // Calculate overlap between break period, billing month, and stay period
+      const breakOverlapStart = new Date(Math.max(breakStart, ms, actualStart));
+      const breakOverlapEnd = new Date(Math.min(breakEnd, monthEnd, actualEnd));
 
       if (breakOverlapStart <= breakOverlapEnd) {
         breakPeriods.push({
