@@ -610,12 +610,14 @@ async function calculateBills(
   );
 
   // Get division rules
+  console.log("=== DEBUG: Getting division rules ===");
   const { data: divisionRules, error: rulesError } = await supabase
     .from("division_rule_default")
     .select("*")
     .eq("property_id", property_id);
 
   if (rulesError) throw rulesError;
+  console.log("Division rules found:", divisionRules.length);
 
   const rulesMap = {};
   divisionRules.forEach((rule) => {
@@ -623,6 +625,7 @@ async function calculateBills(
   });
 
   // Get utility actuals
+  console.log("=== DEBUG: Getting utility actuals ===");
   const { data: utilityActuals, error: actualsError } = await supabase
     .from("utility_actual")
     .select("*")
@@ -630,14 +633,17 @@ async function calculateBills(
     .eq("month_start", month_start);
 
   if (actualsError) throw actualsError;
+  console.log("Utility actuals found:", utilityActuals.length);
 
   // Get tenant rents
+  console.log("=== DEBUG: Getting tenant rents ===");
   const { data: tenantRents, error: rentsError } = await supabase
     .from("tenant_rent")
     .select("*")
     .eq("property_id", property_id);
 
   if (rentsError) throw rentsError;
+  console.log("Tenant rents found:", tenantRents.length);
 
   const billLines = [];
   let totalRent = 0;
@@ -732,6 +738,11 @@ async function calculateBills(
     totalUtilities += amount;
   });
 
+  // Debug: Check billLines array
+  console.log("=== DEBUG: billLines array ===");
+  console.log("billLines.length:", billLines.length);
+  console.log("billLines content:", billLines);
+
   // Insert bill lines
   if (billLines.length > 0) {
     const { error: insertError } = await supabase
@@ -741,9 +752,87 @@ async function calculateBills(
     if (insertError) throw insertError;
   }
 
+  // Create ledger records for each user×property combination
+  console.log("=== DEBUG: Creating ledger records ===");
+
+  // Group bill lines by user_id and bill_run_id to calculate total amount per user
+  const userTotals = {};
+  billLines.forEach((line) => {
+    if (line.user_id) {
+      // Only process lines with actual users (not null)
+      const key = `${line.user_id}_${line.bill_run_id}`;
+      if (!userTotals[key]) {
+        userTotals[key] = {
+          user_id: line.user_id,
+          bill_run_id: line.bill_run_id,
+          total: 0,
+        };
+      }
+      userTotals[key].total += line.amount;
+    }
+  });
+
+  console.log("User totals:", userTotals);
+
+  // Create ledger records for each user
+  const ledgerRecords = [];
+  for (const [key, userTotal] of Object.entries(userTotals)) {
+    const { user_id, bill_run_id, total } = userTotal;
+
+    // Get current balance for this user×property
+    const { data: currentLedger, error: ledgerError } = await supabase
+      .from("ledger")
+      .select("amount")
+      .eq("user_id", user_id)
+      .eq("property_id", property_id)
+      .order("posted_at", { ascending: false })
+      .limit(1);
+
+    if (ledgerError) {
+      console.error("Error fetching current ledger:", ledgerError);
+      continue;
+    }
+
+    // Calculate current balance (0 if no previous records)
+    const currentBalance =
+      currentLedger && currentLedger.length > 0 ? currentLedger[0].amount : 0;
+
+    // Calculate new cumulative balance
+    const newBalance = currentBalance + -total; // Negative because it's a bill
+
+    console.log(
+      `User ${user_id}: current=${currentBalance}, bill=${total}, new=${newBalance}`
+    );
+
+    // Create ledger record
+    ledgerRecords.push({
+      user_id: user_id,
+      property_id: parseInt(property_id),
+      source_type: "bill",
+      source_id: bill_run_id,
+      amount: newBalance,
+      posted_at: new Date().toISOString(),
+    });
+  }
+
+  // Insert ledger records
+  if (ledgerRecords.length > 0) {
+    const { error: ledgerInsertError } = await supabase
+      .from("ledger")
+      .insert(ledgerRecords);
+
+    if (ledgerInsertError) {
+      console.error("Error inserting ledger records:", ledgerInsertError);
+      throw ledgerInsertError;
+    }
+
+    console.log(`Created ${ledgerRecords.length} ledger records`);
+  }
+
   return {
     bill_run_id: billRun.bill_run_id,
     lines_created: billLines.length,
+    ledger_records_created: ledgerRecords.length,
     totals: {
       rent: totalRent,
       utilities: totalUtilities,
