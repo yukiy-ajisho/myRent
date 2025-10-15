@@ -104,6 +104,12 @@ export default function AdminPanel() {
     Record<string, Array<{ breakStart: string; breakEnd: string }>>
   >({});
   const [rentAmounts, setRentAmounts] = useState<Record<string, number>>({});
+  const [newTenant, setNewTenant] = useState({
+    name: "",
+    email: "",
+    user_type: "tenant",
+    property_id: "",
+  });
 
   // Initialize month to current month
   useEffect(() => {
@@ -431,6 +437,69 @@ export default function AdminPanel() {
     }
   };
 
+  const handleCreateTenant = async () => {
+    try {
+      // デバッグ情報を追加
+      console.log("newTenant:", newTenant);
+      console.log("property_id type:", typeof newTenant.property_id);
+      console.log("property_id value:", newTenant.property_id);
+
+      // バリデーション
+      if (!newTenant.name || !newTenant.email || !newTenant.property_id) {
+        setMessage("Please fill in all fields");
+        return;
+      }
+
+      // property_idを数値に変換
+      const propertyId = parseInt(newTenant.property_id);
+      console.log("parsed property_id:", propertyId);
+      console.log("isNaN:", isNaN(propertyId));
+
+      if (isNaN(propertyId)) {
+        setMessage("Please select a valid property");
+        return;
+      }
+
+      const tenantData = {
+        ...newTenant,
+        property_id: propertyId,
+      };
+
+      console.log("tenantData:", tenantData);
+
+      // API呼び出し
+      const response = await api.createTenant(tenantData);
+
+      if (response.success) {
+        setMessage("Tenant created successfully!");
+        // フォームをリセット
+        setNewTenant({
+          name: "",
+          email: "",
+          user_type: "tenant",
+          property_id: "",
+        });
+        // データを再読み込み
+        loadBootstrapData(selectedProperty, selectedMonth);
+        loadUsers(selectedProperty);
+      } else {
+        setMessage("Error creating tenant: " + response.error);
+      }
+    } catch (error) {
+      console.error("Error creating tenant:", error);
+      setMessage("Error creating tenant");
+    }
+  };
+
+  const handleCancelTenant = () => {
+    setNewTenant({
+      name: "",
+      email: "",
+      user_type: "tenant",
+      property_id: "",
+    });
+  };
+
   // Break period management functions
   const addBreakPeriod = (userId: string) => {
     setBreakPeriods((prev) => ({
@@ -472,6 +541,97 @@ export default function AdminPanel() {
             className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
           >
             Sign Out
+          </button>
+        </div>
+      </div>
+
+      {/* Create New Tenant / Add Property Section */}
+      <div className="bg-white shadow rounded-lg p-6 mb-8">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">
+          Create New Tenant / Add Property
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Name
+            </label>
+            <input
+              type="text"
+              value={newTenant.name}
+              onChange={(e) =>
+                setNewTenant({ ...newTenant, name: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Enter tenant name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={newTenant.email}
+              onChange={(e) =>
+                setNewTenant({ ...newTenant, email: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Enter tenant email"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              User Type
+            </label>
+            <select
+              value={newTenant.user_type}
+              onChange={(e) =>
+                setNewTenant({ ...newTenant, user_type: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="tenant">Tenant</option>
+              <option value="owner">Owner</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Property
+            </label>
+            <select
+              value={newTenant.property_id}
+              onChange={(e) =>
+                setNewTenant({ ...newTenant, property_id: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Select Property</option>
+              {bootstrapData?.properties.map((property) => (
+                <option key={property.property_id} value={property.property_id}>
+                  {property.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={handleCreateTenant}
+            disabled={isLoading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button
+            onClick={handleCancelTenant}
+            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+          >
+            Cancel
           </button>
         </div>
       </div>

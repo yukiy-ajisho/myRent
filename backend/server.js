@@ -755,6 +755,155 @@ async function calculateBills(
   };
 }
 
+// Create tenant endpoint
+app.post("/create-tenant", async (req, res) => {
+  try {
+    const { name, email, user_type, property_id } = req.body;
+
+    console.log("=== DEBUG: create-tenant ===");
+    console.log("Request body:", { name, email, user_type, property_id });
+    console.log("property_id type:", typeof property_id);
+
+    // バリデーション
+    if (!name || !email || !user_type || !property_id) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+      });
+    }
+
+    // 既存ユーザーのチェック（emailで検索）
+    const { data: existingUser, error: userError } = await supabase
+      .from("app_user")
+      .select("user_id")
+      .eq("email", email)
+      .single();
+
+    if (userError && userError.code !== "PGRST116") {
+      throw userError;
+    }
+
+    let userId;
+
+    if (existingUser) {
+      // 既存ユーザーの場合
+      userId = existingUser.user_id;
+      console.log("Existing user found, userId:", userId);
+
+      // 既に同じpropertyに所属しているかチェック
+      const { data: existingUserProperty, error: upError } = await supabase
+        .from("user_property")
+        .select("user_property_id")
+        .eq("user_id", userId)
+        .eq("property_id", property_id)
+        .single();
+
+      if (upError && upError.code !== "PGRST116") {
+        throw upError;
+      }
+
+      if (existingUserProperty) {
+        return res.status(400).json({
+          success: false,
+          error: "User already belongs to this property",
+        });
+      }
+
+      // user_propertyにレコード追加
+      console.log("Inserting into user_property:", {
+        user_id: userId,
+        property_id: parseInt(property_id),
+      });
+      const { error: upInsertError } = await supabase
+        .from("user_property")
+        .insert({
+          user_id: userId,
+          property_id: parseInt(property_id),
+        });
+
+      if (upInsertError) {
+        console.error("user_property insert error:", upInsertError);
+        throw upInsertError;
+      }
+    } else {
+      // 新規ユーザーの場合
+      console.log("Creating new user:", { name, email, user_type });
+      const { data: newUser, error: newUserError } = await supabase
+        .from("app_user")
+        .insert({
+          name,
+          email,
+          user_type,
+          personal_multiplier: 1.0,
+        })
+        .select("user_id")
+        .single();
+
+      if (newUserError) {
+        console.error("app_user insert error:", newUserError);
+        throw newUserError;
+      }
+      userId = newUser.user_id;
+      console.log("New user created, userId:", userId);
+
+      // user_propertyにレコード追加
+      console.log("Inserting into user_property:", {
+        user_id: userId,
+        property_id: parseInt(property_id),
+      });
+      const { error: upInsertError } = await supabase
+        .from("user_property")
+        .insert({
+          user_id: userId,
+          property_id: parseInt(property_id),
+        });
+
+      if (upInsertError) {
+        console.error("user_property insert error:", upInsertError);
+        throw upInsertError;
+      }
+    }
+
+    // ledgerにレコード追加（初期化）
+    const sourceId = Math.floor(Math.random() * 1000000000); // int8型
+    console.log("Inserting into ledger:", {
+      user_id: userId,
+      property_id: parseInt(property_id),
+      source_type: "adjustment",
+      source_id: sourceId,
+      amount: 0,
+    });
+    const { error: ledgerError } = await supabase.from("ledger").insert({
+      user_id: userId, // UUID型
+      property_id: parseInt(property_id), // bigint型
+      source_type: "adjustment",
+      source_id: sourceId, // int8型
+      amount: 0,
+    });
+
+    if (ledgerError) {
+      console.error("ledger insert error:", ledgerError);
+      throw ledgerError;
+    }
+
+    console.log("Success: Tenant created/updated");
+
+    res.json({
+      success: true,
+      message: existingUser
+        ? "Property added to existing tenant"
+        : "New tenant created successfully",
+      user_id: userId,
+    });
+  } catch (error) {
+    console.error("Error creating tenant:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });

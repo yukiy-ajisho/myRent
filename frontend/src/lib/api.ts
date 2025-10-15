@@ -105,4 +105,17 @@ export const api = {
   dumpAll: () => {
     return apiRequest("/dump-all");
   },
+
+  // Create tenant
+  createTenant: (data: {
+    name: string;
+    email: string;
+    user_type: string;
+    property_id: string;
+  }) => {
+    return apiRequest("/create-tenant", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
