@@ -118,4 +118,17 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Create property
+  createProperty: (data: {
+    name: string;
+    timezone: string;
+    owner_id: string;
+    active?: boolean;
+  }) => {
+    return apiRequest("/create-property", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };

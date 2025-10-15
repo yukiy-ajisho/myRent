@@ -97,6 +97,7 @@ export default function AdminPanel() {
   const [dumpData, setDumpData] = useState<any>(null);
   const [stayDays, setStayDays] = useState<Record<string, string>>({});
   const [users, setUsers] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [stayPeriods, setStayPeriods] = useState<
     Record<string, { startDate: string; endDate: string }>
   >({});
@@ -107,8 +108,14 @@ export default function AdminPanel() {
   const [newTenant, setNewTenant] = useState({
     name: "",
     email: "",
-    user_type: "tenant",
     property_id: "",
+  });
+
+  const [newProperty, setNewProperty] = useState({
+    name: "",
+    timezone: "",
+    owner_id: "",
+    active: true,
   });
 
   // Initialize month to current month
@@ -118,6 +125,21 @@ export default function AdminPanel() {
       now.getMonth() + 1
     ).padStart(2, "0")}-01`;
     setSelectedMonth(currentMonth);
+  }, []);
+
+  // Load all users for owner dropdown on component mount
+  useEffect(() => {
+    const loadAllUsers = async () => {
+      try {
+        const data = await api.dumpAll();
+        console.log("DEBUG: Loading all users on mount:", data.app_user);
+        setAllUsers(data.app_user || []);
+      } catch (error) {
+        console.error("Failed to load all users:", error);
+      }
+    };
+
+    loadAllUsers();
   }, []);
 
   // Load bootstrap data
@@ -165,7 +187,12 @@ export default function AdminPanel() {
       });
       console.log("Property users:", propertyUsers);
 
+      // Set property users for stay periods, rent, etc.
       setUsers(propertyUsers);
+
+      // Also set all users for owner selection dropdown
+      console.log("DEBUG: All users fetched for dropdown:", allUsers);
+      setAllUsers(allUsers);
 
       // Initialize stay periods for these users
       const initialStayPeriods: Record<
@@ -462,6 +489,7 @@ export default function AdminPanel() {
 
       const tenantData = {
         ...newTenant,
+        user_type: "tenant",
         property_id: propertyId,
       };
 
@@ -495,8 +523,44 @@ export default function AdminPanel() {
     setNewTenant({
       name: "",
       email: "",
-      user_type: "tenant",
       property_id: "",
+    });
+  };
+
+  const handleCreateProperty = async () => {
+    try {
+      console.log("newProperty:", newProperty);
+
+      if (!newProperty.name || !newProperty.timezone || !newProperty.owner_id) {
+        console.log("Missing required fields");
+        return;
+      }
+
+      const response = await api.createProperty(newProperty);
+
+      if (response.success) {
+        console.log("Property created successfully!");
+        setNewProperty({
+          name: "",
+          timezone: "",
+          owner_id: "",
+          active: true,
+        });
+        loadBootstrapData(selectedProperty, selectedMonth);
+      } else {
+        console.log("Error creating property:", response.error);
+      }
+    } catch (error) {
+      console.error("Error creating property:", error);
+    }
+  };
+
+  const handleCancelProperty = () => {
+    setNewProperty({
+      name: "",
+      timezone: "",
+      owner_id: "",
+      active: true,
     });
   };
 
@@ -584,22 +648,6 @@ export default function AdminPanel() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              User Type
-            </label>
-            <select
-              value={newTenant.user_type}
-              onChange={(e) =>
-                setNewTenant({ ...newTenant, user_type: e.target.value })
-              }
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="tenant">Tenant</option>
-              <option value="owner">Owner</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
               Property
             </label>
             <select
@@ -630,6 +678,103 @@ export default function AdminPanel() {
           <button
             onClick={handleCancelTenant}
             className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+
+      {/* Create New Property Section */}
+      <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+        <h3 className="text-lg font-semibold mb-4">Create New Property</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Property Name
+            </label>
+            <input
+              type="text"
+              value={newProperty.name}
+              onChange={(e) =>
+                setNewProperty({ ...newProperty, name: e.target.value })
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter property name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Timezone
+            </label>
+            <select
+              value={newProperty.timezone}
+              onChange={(e) =>
+                setNewProperty({ ...newProperty, timezone: e.target.value })
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Timezone</option>
+              <option value="America/Los_Angeles">America/Los_Angeles</option>
+              <option value="America/New_York">America/New_York</option>
+              <option value="America/Chicago">America/Chicago</option>
+              <option value="Asia/Tokyo">Asia/Tokyo</option>
+              <option value="Europe/London">Europe/London</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Owner
+            </label>
+            <select
+              value={newProperty.owner_id}
+              onChange={(e) =>
+                setNewProperty({ ...newProperty, owner_id: e.target.value })
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Owner</option>
+              {allUsers
+                .filter((user) => user.user_type === "owner")
+                .map((user) => (
+                  <option key={user.user_id} value={user.user_id}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="active"
+              checked={newProperty.active}
+              onChange={(e) =>
+                setNewProperty({ ...newProperty, active: e.target.checked })
+              }
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label
+              htmlFor="active"
+              className="ml-2 block text-sm text-gray-700"
+            >
+              Active
+            </label>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleCreateProperty}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            Save
+          </button>
+          <button
+            onClick={handleCancelProperty}
+            className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
           >
             Cancel
           </button>

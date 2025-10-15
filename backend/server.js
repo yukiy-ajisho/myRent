@@ -904,6 +904,89 @@ app.post("/create-tenant", async (req, res) => {
   }
 });
 
+// Create property endpoint
+app.post("/create-property", async (req, res) => {
+  try {
+    const { name, timezone, owner_id, active = true } = req.body;
+
+    console.log("=== DEBUG: create-property ===");
+    console.log("Request body:", { name, timezone, owner_id, active });
+
+    if (!name || !timezone || !owner_id) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+      });
+    }
+
+    // owner_idがownerタイプのユーザーかチェック
+    const { data: ownerUser, error: ownerError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", owner_id)
+      .single();
+
+    if (ownerError) {
+      throw ownerError;
+    }
+
+    if (ownerUser.user_type !== "owner") {
+      return res.status(400).json({
+        success: false,
+        error: "Selected user is not an owner",
+      });
+    }
+
+    // 重複チェック: 同じownerが同じ名前のプロパティを持っていないかチェック
+    const { data: existingProperty, error: duplicateError } = await supabase
+      .from("property")
+      .select("property_id")
+      .eq("name", name)
+      .eq("owner_id", owner_id)
+      .single();
+
+    if (duplicateError && duplicateError.code !== "PGRST116") {
+      throw duplicateError;
+    }
+
+    if (existingProperty) {
+      return res.status(400).json({
+        success: false,
+        error: "Property with this name already exists for this owner",
+      });
+    }
+
+    // propertyテーブルに挿入
+    const { data: newProperty, error: propError } = await supabase
+      .from("property")
+      .insert({
+        name,
+        timezone,
+        owner_id,
+        active,
+      })
+      .select("property_id")
+      .single();
+
+    if (propError) {
+      throw propError;
+    }
+
+    console.log("Success: Property created");
+    res.json({
+      success: true,
+      message: "Property created successfully",
+      property_id: newProperty.property_id,
+    });
+  } catch (error) {
+    console.error("Error creating property:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
