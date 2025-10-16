@@ -1076,6 +1076,148 @@ app.post("/create-property", async (req, res) => {
   }
 });
 
+// Create payment endpoint
+app.post("/create-payment", async (req, res) => {
+  try {
+    const { user_id, property_id, amount, note } = req.body;
+
+    console.log("=== DEBUG: create-payment ===");
+    console.log("Request body:", { user_id, property_id, amount, note });
+
+    if (!user_id || !property_id || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+      });
+    }
+
+    // Validate amount is positive
+    if (amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Amount must be positive",
+      });
+    }
+
+    // Check if user exists and is a tenant
+    const { data: user, error: userError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", user_id)
+      .single();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (user.user_type !== "tenant") {
+      return res.status(400).json({
+        success: false,
+        error: "Selected user is not a tenant",
+      });
+    }
+
+    // Check if property exists
+    const { data: property, error: propertyError } = await supabase
+      .from("property")
+      .select("property_id")
+      .eq("property_id", property_id)
+      .single();
+
+    if (propertyError) {
+      throw propertyError;
+    }
+
+    // Check if user belongs to this property
+    const { data: userProperty, error: upError } = await supabase
+      .from("user_property")
+      .select("user_property_id")
+      .eq("user_id", user_id)
+      .eq("property_id", property_id)
+      .single();
+
+    if (upError) {
+      return res.status(400).json({
+        success: false,
+        error: "User does not belong to this property",
+      });
+    }
+
+    // Insert into payment table
+    const { data: newPayment, error: paymentError } = await supabase
+      .from("payment")
+      .insert({
+        user_id: user_id,
+        property_id: parseInt(property_id),
+        amount: parseFloat(amount),
+        note: note || null,
+        paid_at: new Date().toISOString(),
+      })
+      .select("payment_id")
+      .single();
+
+    if (paymentError) {
+      console.error("payment insert error:", paymentError);
+      throw paymentError;
+    }
+
+    console.log("Payment created, payment_id:", newPayment.payment_id);
+
+    // Get current balance for this user×property
+    const { data: currentLedger, error: ledgerError } = await supabase
+      .from("ledger")
+      .select("amount")
+      .eq("user_id", user_id)
+      .eq("property_id", property_id)
+      .order("posted_at", { ascending: false })
+      .limit(1);
+
+    if (ledgerError) {
+      console.error("Error fetching current ledger:", ledgerError);
+      throw ledgerError;
+    }
+
+    // Calculate current balance (0 if no previous records)
+    const currentBalance =
+      currentLedger && currentLedger.length > 0 ? currentLedger[0].amount : 0;
+
+    // Calculate new cumulative balance (positive because it's a payment)
+    const newBalance = currentBalance + parseFloat(amount);
+
+    console.log(
+      `User ${user_id}: current=${currentBalance}, payment=${amount}, new=${newBalance}`
+    );
+
+    // Create ledger record
+    const { error: ledgerInsertError } = await supabase.from("ledger").insert({
+      user_id: user_id,
+      property_id: parseInt(property_id),
+      source_type: "payment",
+      source_id: newPayment.payment_id,
+      amount: newBalance,
+      posted_at: new Date().toISOString(),
+    });
+
+    if (ledgerInsertError) {
+      console.error("Error inserting ledger record:", ledgerInsertError);
+      throw ledgerInsertError;
+    }
+
+    console.log("Success: Payment created and ledger updated");
+    res.json({
+      success: true,
+      message: "Payment created successfully",
+      payment_id: newPayment.payment_id,
+    });
+  } catch (error) {
+    console.error("Error creating payment:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });

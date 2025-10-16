@@ -118,6 +118,13 @@ export default function AdminPanel() {
     active: true,
   });
 
+  const [newPayment, setNewPayment] = useState({
+    user_id: "",
+    property_id: "",
+    amount: "",
+    note: "",
+  });
+
   // Initialize month to current month
   useEffect(() => {
     const now = new Date();
@@ -594,6 +601,56 @@ export default function AdminPanel() {
     }));
   };
 
+  const handleCreatePayment = async () => {
+    try {
+      if (
+        !newPayment.user_id ||
+        !newPayment.property_id ||
+        !newPayment.amount
+      ) {
+        alert("Please fill in all required fields");
+        return;
+      }
+
+      const paymentData = {
+        user_id: newPayment.user_id,
+        property_id: parseInt(newPayment.property_id),
+        amount: parseFloat(newPayment.amount),
+        note: newPayment.note,
+      };
+
+      console.log("Creating payment:", paymentData);
+      const result = await api.createPayment(paymentData);
+      console.log("Payment created:", result);
+
+      if (result.success) {
+        alert("Payment created successfully!");
+        setNewPayment({
+          user_id: "",
+          property_id: "",
+          amount: "",
+          note: "",
+        });
+        // Reload data to show updated ledger
+        await loadUsers(selectedProperty);
+      } else {
+        alert(`Failed to create payment: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error creating payment:", error);
+      alert("Failed to create payment");
+    }
+  };
+
+  const handleCancelPayment = () => {
+    setNewPayment({
+      user_id: "",
+      property_id: "",
+      amount: "",
+      note: "",
+    });
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -658,7 +715,7 @@ export default function AdminPanel() {
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">Select Property</option>
-              {bootstrapData?.properties.map((property) => (
+              {bootstrapData?.properties?.map((property) => (
                 <option key={property.property_id} value={property.property_id}>
                   {property.name}
                 </option>
@@ -781,6 +838,103 @@ export default function AdminPanel() {
         </div>
       </div>
 
+      {/* Create New Payment Section */}
+      <div className="bg-white shadow rounded-lg p-6 mb-8">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">
+          Create New Payment
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              User *
+            </label>
+            <select
+              value={newPayment.user_id}
+              onChange={(e) =>
+                setNewPayment({ ...newPayment, user_id: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Select User</option>
+              {allUsers
+                .filter((user) => user.user_type === "tenant")
+                .map((user) => (
+                  <option key={user.user_id} value={user.user_id}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Property *
+            </label>
+            <select
+              value={newPayment.property_id}
+              onChange={(e) =>
+                setNewPayment({ ...newPayment, property_id: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Select Property</option>
+              {bootstrapData?.properties?.map((property) => (
+                <option key={property.property_id} value={property.property_id}>
+                  {property.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Amount *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={newPayment.amount}
+              onChange={(e) =>
+                setNewPayment({ ...newPayment, amount: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Enter payment amount"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Note
+            </label>
+            <input
+              type="text"
+              value={newPayment.note}
+              onChange={(e) =>
+                setNewPayment({ ...newPayment, note: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Optional note"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={handleCreatePayment}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            Create Payment
+          </button>
+          <button
+            onClick={handleCancelPayment}
+            className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+
       {/* Context Selection */}
       <div className="bg-white shadow rounded-lg p-6 mb-8">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Context</h2>
@@ -795,7 +949,7 @@ export default function AdminPanel() {
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">Select Property</option>
-              {bootstrapData?.properties.map((property) => (
+              {bootstrapData?.properties?.map((property) => (
                 <option key={property.property_id} value={property.property_id}>
                   {property.name}
                 </option>

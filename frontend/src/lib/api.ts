@@ -131,4 +131,17 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Create payment
+  createPayment: (data: {
+    user_id: string;
+    property_id: number;
+    amount: number;
+    note?: string;
+  }) => {
+    return apiRequest("/create-payment", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
