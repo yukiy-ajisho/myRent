@@ -172,6 +172,91 @@ app.get("/bill-line/:propertyId", async (req, res) => {
   }
 });
 
+// POST /add-tenant - テナント追加（新規作成 or 既存テナント追加）
+app.post("/add-tenant", async (req, res) => {
+  try {
+    const { name, email, personal_multiplier, propertyId } = req.body;
+    const userId = req.user.id;
+
+    // ユーザーがこのプロパティにアクセス権限があるかチェック
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (accessError || !userProperty) {
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 既存テナントかチェック（内部処理のみ）
+    const { data: existingTenant, error: searchError } = await supabase
+      .from("app_user")
+      .select("user_id")
+      .eq("name", name)
+      .eq("email", email)
+      .eq("user_type", "tenant")
+      .single();
+
+    let tenantUserId;
+
+    if (existingTenant) {
+      // 既存テナントの場合
+      tenantUserId = existingTenant.user_id;
+
+      // 既にこのプロパティに所属していないかチェック
+      const { data: existingRelation } = await supabase
+        .from("user_property")
+        .select("user_id")
+        .eq("user_id", tenantUserId)
+        .eq("property_id", propertyId)
+        .single();
+
+      if (existingRelation) {
+        return res
+          .status(400)
+          .json({ error: "Tenant already exists in this property" });
+      }
+    } else {
+      // 新規テナント作成
+      const { data: newTenant, error: createError } = await supabase
+        .from("app_user")
+        .insert({
+          name,
+          email,
+          user_type: "tenant",
+          personal_multiplier: personal_multiplier || 1,
+        })
+        .select("user_id")
+        .single();
+
+      if (createError) throw createError;
+      tenantUserId = newTenant.user_id;
+    }
+
+    // プロパティに所属させる
+    const { error: relationError } = await supabase
+      .from("user_property")
+      .insert({
+        user_id: tenantUserId,
+        property_id: propertyId,
+      });
+
+    if (relationError) throw relationError;
+
+    res.json({
+      success: true,
+      message: existingTenant
+        ? "Existing tenant added to property"
+        : "New tenant created and added to property",
+    });
+  } catch (error) {
+    console.error("Add tenant error:", error);
+    res.status(500).json({ error: "Failed to add tenant" });
+  }
+});
+
 // GET /rent-data/:propertyId - プロパティ固有の家賃データ取得
 app.get("/rent-data/:propertyId", async (req, res) => {
   try {

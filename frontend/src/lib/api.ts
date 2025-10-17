@@ -167,4 +167,17 @@ export const api = {
   getRentData: (propertyId: string) => {
     return apiRequest(`/rent-data/${propertyId}`);
   },
+
+  // Add tenant (new or existing)
+  addTenant: (data: {
+    name: string;
+    email: string;
+    personal_multiplier: number;
+    propertyId: string;
+  }) => {
+    return apiRequest("/add-tenant", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
