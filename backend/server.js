@@ -209,7 +209,8 @@ app.get("/rent-data/:propertyId", async (req, res) => {
           user_id,
           name,
           email,
-          user_type
+          user_type,
+          personal_multiplier
         )
       `
         )
@@ -326,7 +327,8 @@ app.get("/bootstrap", async (req, res) => {
               user_id,
               name,
               email,
-              user_type
+              user_type,
+              personal_multiplier
             )
           `
           )
@@ -334,6 +336,10 @@ app.get("/bootstrap", async (req, res) => {
 
         if (userPropsError) throw userPropsError;
         console.log("User properties found:", userProperties);
+        console.log(
+          "First user property app_user:",
+          userProperties[0]?.app_user
+        );
 
         tenants = userProperties
           .map((up) => up.app_user)
