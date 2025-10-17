@@ -25,6 +25,11 @@ export default function History() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Filter states
+  const [selectedYear, setSelectedYear] = useState<string>("");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [selectedName, setSelectedName] = useState<string>("");
+
   const fetchBillLineData = useCallback(async () => {
     if (!selectedProperty) return;
 
@@ -97,9 +102,171 @@ export default function History() {
     return a.app_user?.name?.localeCompare(b.app_user?.name || "") || 0;
   });
 
+  // Extract unique values for dropdowns
+  const uniqueYears = Array.from(
+    new Set(
+      sortedBillLines
+        .map((billLine) => billLine.bill_run?.month_start?.substring(0, 4))
+        .filter(Boolean)
+    )
+  ).sort();
+
+  const uniqueMonths = Array.from(
+    new Set(
+      sortedBillLines
+        .map((billLine) => billLine.bill_run?.month_start?.substring(5, 7))
+        .filter(Boolean)
+    )
+  ).sort();
+
+  const uniqueNames = Array.from(
+    new Set(
+      sortedBillLines.map((billLine) => billLine.app_user?.name).filter(Boolean)
+    )
+  ).sort();
+
+  // Filter bill lines based on selected filters
+  const filteredBillLines = sortedBillLines.filter((billLine) => {
+    const year = billLine.bill_run?.month_start?.substring(0, 4);
+    const month = billLine.bill_run?.month_start?.substring(5, 7);
+    const name = billLine.app_user?.name;
+
+    const yearMatch = !selectedYear || year === selectedYear;
+    const monthMatch = !selectedMonth || month === selectedMonth;
+    const nameMatch = !selectedName || name === selectedName;
+
+    return yearMatch && monthMatch && nameMatch;
+  });
+
   return (
     <div>
-      {sortedBillLines.map((billLine) => (
+      {/* Filter Controls */}
+      <div
+        style={{
+          marginBottom: "20px",
+          padding: "15px",
+          border: "1px solid #ddd",
+          borderRadius: "8px",
+        }}
+      >
+        <h3 style={{ marginBottom: "15px" }}>Filters</h3>
+        <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
+          {/* Year Filter */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                marginBottom: "5px",
+                fontWeight: "bold",
+              }}
+            >
+              Year:
+            </label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              style={{
+                padding: "5px",
+                borderRadius: "4px",
+                border: "1px solid #ccc",
+              }}
+            >
+              <option value="">All Years</option>
+              {uniqueYears.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Month Filter */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                marginBottom: "5px",
+                fontWeight: "bold",
+              }}
+            >
+              Month:
+            </label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              style={{
+                padding: "5px",
+                borderRadius: "4px",
+                border: "1px solid #ccc",
+              }}
+            >
+              <option value="">All Months</option>
+              {uniqueMonths.map((month) => (
+                <option key={month} value={month}>
+                  {month}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Name Filter */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                marginBottom: "5px",
+                fontWeight: "bold",
+              }}
+            >
+              Name:
+            </label>
+            <select
+              value={selectedName}
+              onChange={(e) => setSelectedName(e.target.value)}
+              style={{
+                padding: "5px",
+                borderRadius: "4px",
+                border: "1px solid #ccc",
+              }}
+            >
+              <option value="">All Names</option>
+              {uniqueNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear Filters Button */}
+          <div style={{ alignSelf: "end" }}>
+            <button
+              onClick={() => {
+                setSelectedYear("");
+                setSelectedMonth("");
+                setSelectedName("");
+              }}
+              style={{
+                padding: "5px 15px",
+                backgroundColor: "#f0f0f0",
+                border: "1px solid #ccc",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Results Count */}
+      <div style={{ marginBottom: "15px", fontSize: "14px", color: "#666" }}>
+        Showing {filteredBillLines.length} of {sortedBillLines.length} records
+      </div>
+
+      {/* Bill Lines List */}
+      {filteredBillLines.map((billLine) => (
         <div
           key={billLine.bill_line_id}
           style={{
