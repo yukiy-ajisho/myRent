@@ -86,9 +86,20 @@ export default function History() {
     return <div>データがありません</div>;
   }
 
+  // Sort bill lines: first by bill_run_id (ascending), then by name (ascending)
+  const sortedBillLines = billLines.sort((a, b) => {
+    // First priority: bill_run_id ascending
+    if (a.bill_run_id !== b.bill_run_id) {
+      return a.bill_run_id - b.bill_run_id;
+    }
+
+    // Second priority: name ascending within same bill_run_id
+    return a.app_user?.name?.localeCompare(b.app_user?.name || "") || 0;
+  });
+
   return (
     <div>
-      {billLines.map((billLine) => (
+      {sortedBillLines.map((billLine) => (
         <div
           key={billLine.bill_line_id}
           style={{
@@ -97,10 +108,19 @@ export default function History() {
             border: "1px solid #ccc",
           }}
         >
-          <div>Tenant name: {billLine.app_user?.name || "不明"}</div>
+          <div>Tenant name: {billLine.app_user?.name || "Unknown"}</div>
           <div>Amount: ${billLine.amount.toLocaleString()}</div>
-          <div>Utility: {billLine.utility}</div>
-          <div>Month: {billLine.bill_run?.month_start || "不明"}</div>
+          <div>
+            Utility:{" "}
+            {billLine.utility.charAt(0).toUpperCase() +
+              billLine.utility.slice(1)}
+          </div>
+          <div>
+            Month:{" "}
+            {billLine.bill_run?.month_start
+              ? billLine.bill_run.month_start.substring(0, 7)
+              : "Unknown"}
+          </div>
         </div>
       ))}
     </div>
