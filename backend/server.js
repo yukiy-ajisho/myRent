@@ -104,6 +104,54 @@ app.post("/check-user", async (req, res) => {
   }
 });
 
+// GET /bill-line/:propertyId - 特定プロパティのbill_lineデータを取得
+app.get("/bill-line/:propertyId", async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user.id;
+
+    // ユーザーがこのプロパティにアクセス権限があるかチェック
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (accessError || !userProperty) {
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 1. property_idでbill_runテーブルからbill_run_idを取得
+    const { data: billRuns, error: billRunsError } = await supabase
+      .from("bill_run")
+      .select("bill_run_id")
+      .eq("property_id", propertyId);
+
+    if (billRunsError) throw billRunsError;
+
+    if (!billRuns || billRuns.length === 0) {
+      return res.json({ billLines: [] });
+    }
+
+    // 2. bill_run_idのリストを取得
+    const billRunIds = billRuns.map((run) => run.bill_run_id);
+
+    // 3. bill_run_idでbill_lineテーブルからデータを取得
+    const { data: billLines, error } = await supabase
+      .from("bill_line")
+      .select("*")
+      .in("bill_run_id", billRunIds);
+
+    if (error) throw error;
+
+    res.json({ billLines });
+  } catch (error) {
+    console.error("Bill line error:", error);
+    res.status(500).json({ error: "Failed to fetch bill line data" });
+  }
+});
+
 // GET /bootstrap - 初期データ取得（ユーザーが管理するプロパティのみ）
 app.get("/bootstrap", async (req, res) => {
   try {

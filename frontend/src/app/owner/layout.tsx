@@ -4,7 +4,6 @@ import "../globals.css";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
 import {
   BarChart3,
   Home,
@@ -15,7 +14,7 @@ import {
   TrendingUp,
   ChevronDown,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { PropertyProvider, useProperty } from "@/contexts/PropertyContext";
 
 // ナビゲーション項目
 const navigationItems = [
@@ -60,40 +59,44 @@ const navigationItems = [
   },
 ];
 
-export default function OwnerLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-  const [userProperties, setUserProperties] = useState([]);
-  const [selectedProperty, setSelectedProperty] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+// プロパティ選択コンポーネント
+function PropertySelector() {
+  const { selectedProperty, userProperties, isLoading, setSelectedProperty } =
+    useProperty();
 
-  // プロパティ一覧を取得
-  useEffect(() => {
-    const fetchProperties = async () => {
-      try {
-        const data = await api.getUserProperties();
-        setUserProperties(data.properties);
-        if (data.properties.length > 0) {
-          setSelectedProperty(data.properties[0]);
-        }
-      } catch (error) {
-        console.error("Failed to fetch properties:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchProperties();
-  }, []);
-
-  // プロパティ選択ハンドラー
-  const handlePropertyChange = (propertyId) => {
+  const handlePropertyChange = (propertyId: string) => {
     const property = userProperties.find((p) => p.property_id == propertyId);
-    setSelectedProperty(property);
+    setSelectedProperty(property || null);
   };
+
+  return (
+    <div className="mt-4">
+      {isLoading ? (
+        <div className="text-sm text-gray-500">Loading properties...</div>
+      ) : userProperties.length > 0 ? (
+        <div className="relative">
+          <select
+            value={selectedProperty?.property_id || ""}
+            onChange={(e) => handlePropertyChange(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+          >
+            {userProperties.map((property) => (
+              <option key={property.property_id} value={property.property_id}>
+                {property.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div className="text-sm text-gray-500">No properties found</div>
+      )}
+    </div>
+  );
+}
+
+// レイアウトコンテンツコンポーネント
+function LayoutContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
 
   return (
     <div className="h-screen flex bg-gray-50">
@@ -113,31 +116,7 @@ export default function OwnerLayout({
           </div>
 
           {/* プロパティ選択ドロップダウン */}
-          <div className="mt-4">
-            {isLoading ? (
-              <div className="text-sm text-gray-500">Loading properties...</div>
-            ) : userProperties.length > 0 ? (
-              <div className="relative">
-                <select
-                  value={selectedProperty?.property_id || ""}
-                  onChange={(e) => handlePropertyChange(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                >
-                  {userProperties.map((property) => (
-                    <option
-                      key={property.property_id}
-                      value={property.property_id}
-                    >
-                      {property.property.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500">No properties found</div>
-            )}
-          </div>
+          <PropertySelector />
         </div>
 
         {/* ナビゲーション項目 */}
@@ -223,5 +202,18 @@ export default function OwnerLayout({
         <main className="flex-1 overflow-y-auto bg-gray-50">{children}</main>
       </div>
     </div>
+  );
+}
+
+// メインのレイアウトコンポーネント
+export default function OwnerLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <PropertyProvider>
+      <LayoutContent>{children}</LayoutContent>
+    </PropertyProvider>
   );
 }

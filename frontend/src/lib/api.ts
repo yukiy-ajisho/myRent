@@ -157,4 +157,9 @@ export const api = {
       body: JSON.stringify({ user_id: userId }),
     });
   },
+
+  // Get bill line data for a specific property
+  getBillLineData: (propertyId: string) => {
+    return apiRequest(`/bill-line/${propertyId}`);
+  },
 };
