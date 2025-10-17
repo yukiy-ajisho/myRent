@@ -172,6 +172,172 @@ app.get("/bill-line/:propertyId", async (req, res) => {
   }
 });
 
+// GET /payments/:propertyId - プロパティの支払いレコード取得
+app.get("/payments/:propertyId", async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user.id;
+
+    // ユーザーがこのプロパティにアクセス権限があるかチェック
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (accessError || !userProperty) {
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 支払いレコードをテナント名と一緒に取得
+    const { data: payments, error: paymentsError } = await supabase
+      .from("payment")
+      .select(
+        `
+        payment_id,
+        user_id,
+        property_id,
+        amount,
+        note,
+        paid_at,
+        app_user!inner(
+          name,
+          email
+        )
+      `
+      )
+      .eq("property_id", propertyId)
+      .order("paid_at", { ascending: false });
+
+    if (paymentsError) throw paymentsError;
+
+    // 既にledgerに反映済みの支払いをチェック
+    const { data: ledgerEntries, error: ledgerError } = await supabase
+      .from("ledger")
+      .select("source_id")
+      .eq("source_type", "payment")
+      .in(
+        "source_id",
+        payments.map((p) => p.payment_id)
+      );
+
+    if (ledgerError) throw ledgerError;
+
+    const acceptedPaymentIds = new Set(ledgerEntries.map((l) => l.source_id));
+
+    // 支払いレコードに承認ステータスを追加
+    const paymentsWithStatus = payments.map((payment) => ({
+      ...payment,
+      isAccepted: acceptedPaymentIds.has(payment.payment_id),
+    }));
+
+    res.json({
+      payments: paymentsWithStatus,
+    });
+  } catch (error) {
+    console.error("Payments error:", error);
+    res.status(500).json({ error: "Failed to fetch payments" });
+  }
+});
+
+// POST /payments/:paymentId/accept - 支払いを承認してledgerに追加
+app.post("/payments/:paymentId/accept", async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const userId = req.user.id;
+
+    console.log("=== PAYMENT ACCEPT DEBUG ===");
+    console.log("Payment ID:", paymentId);
+    console.log("User ID:", userId);
+
+    // 支払いレコードを取得
+    const { data: payment, error: paymentError } = await supabase
+      .from("payment")
+      .select("*")
+      .eq("payment_id", paymentId)
+      .single();
+
+    if (paymentError || !payment) {
+      return res.status(404).json({ error: "Payment not found" });
+    }
+
+    console.log("Payment found:", payment);
+
+    // ユーザーがこのプロパティにアクセス権限があるかチェック
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", payment.property_id)
+      .single();
+
+    if (accessError || !userProperty) {
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 既にledgerに反映済みかチェック
+    const { data: existingLedger, error: ledgerCheckError } = await supabase
+      .from("ledger")
+      .select("ledger_id")
+      .eq("source_type", "payment")
+      .eq("source_id", paymentId)
+      .single();
+
+    if (existingLedger) {
+      return res.status(400).json({ error: "Payment already accepted" });
+    }
+
+    // 現在の累積残高を取得
+    const { data: currentLedger, error: currentLedgerError } = await supabase
+      .from("ledger")
+      .select("amount")
+      .eq("user_id", payment.user_id)
+      .eq("property_id", payment.property_id)
+      .order("posted_at", { ascending: false })
+      .limit(1);
+
+    if (currentLedgerError) throw currentLedgerError;
+
+    // 新しい累積残高を計算
+    const currentBalance =
+      currentLedger?.length > 0 ? currentLedger[0].amount : 0;
+    const newBalance = currentBalance + payment.amount;
+
+    console.log("Current balance:", currentBalance);
+    console.log("Payment amount:", payment.amount);
+    console.log("New balance:", newBalance);
+
+    // ledgerテーブルに追加
+    const { data: newLedgerEntry, error: ledgerError } = await supabase
+      .from("ledger")
+      .insert({
+        user_id: payment.user_id,
+        property_id: payment.property_id,
+        source_type: "payment",
+        source_id: paymentId,
+        amount: newBalance,
+        posted_at: new Date().toISOString(),
+      })
+      .select("ledger_id")
+      .single();
+
+    if (ledgerError) throw ledgerError;
+
+    console.log("Ledger entry created:", newLedgerEntry);
+
+    res.json({
+      success: true,
+      message: "Payment accepted successfully",
+      ledger_id: newLedgerEntry.ledger_id,
+      new_balance: newBalance,
+    });
+  } catch (error) {
+    console.error("Payment accept error:", error);
+    res.status(500).json({ error: "Failed to accept payment" });
+  }
+});
+
 // POST /add-tenant - テナント追加（新規作成 or 既存テナント追加）
 app.post("/add-tenant", async (req, res) => {
   try {

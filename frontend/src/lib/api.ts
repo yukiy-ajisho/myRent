@@ -180,4 +180,16 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Get payments for a specific property
+  getPayments: (propertyId: string) => {
+    return apiRequest(`/payments/${propertyId}`);
+  },
+
+  // Accept payment (add to ledger)
+  acceptPayment: (paymentId: string) => {
+    return apiRequest(`/payments/${paymentId}/accept`, {
+      method: "POST",
+    });
+  },
 };
