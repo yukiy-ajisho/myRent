@@ -144,4 +144,17 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Get user properties
+  getUserProperties: () => {
+    return apiRequest("/user-properties");
+  },
+
+  // Check user exists
+  checkUser: (userId: string) => {
+    return apiRequest("/check-user", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    });
+  },
 };

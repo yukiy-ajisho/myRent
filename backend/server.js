@@ -55,36 +55,106 @@ const verifyJWT = async (req, res, next) => {
 // Apply JWT verification to all routes
 app.use(verifyJWT);
 
-// GET /bootstrap - 初期データ取得
+// GET /user-properties - 認証されたユーザーが管理するプロパティ一覧
+app.get("/user-properties", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { data: userProperties, error } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property_id,
+        property:property_id (
+          property_id,
+          name,
+          timezone,
+          active
+        )
+      `
+      )
+      .eq("user_id", userId);
+
+    if (error) throw error;
+
+    res.json({ properties: userProperties });
+  } catch (error) {
+    console.error("User properties error:", error);
+    res.status(500).json({ error: "Failed to fetch user properties" });
+  }
+});
+
+// POST /check-user - ユーザー存在確認
+app.post("/check-user", async (req, res) => {
+  try {
+    const { user_id } = req.body;
+
+    const { data: user, error } = await supabase
+      .from("app_user")
+      .select("user_id")
+      .eq("user_id", user_id)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+
+    res.json({ exists: !!user });
+  } catch (error) {
+    console.error("Check user error:", error);
+    res.status(500).json({ error: "Failed to check user" });
+  }
+});
+
+// GET /bootstrap - 初期データ取得（ユーザーが管理するプロパティのみ）
 app.get("/bootstrap", async (req, res) => {
   try {
     const { property_id, month_start } = req.query;
+    const userId = req.user.id;
 
-    // Get all properties
-    const { data: properties, error: propertiesError } = await supabase
-      .from("property")
-      .select("*")
-      .eq("active", true);
+    // Get user's properties only
+    const { data: userProperties, error: userPropsError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property_id,
+        property:property_id (
+          property_id,
+          name,
+          timezone,
+          active
+        )
+      `
+      )
+      .eq("user_id", userId);
 
-    if (propertiesError) throw propertiesError;
+    if (userPropsError) throw userPropsError;
 
-    // Get all division rules
+    const properties = userProperties
+      .map((up) => up.property)
+      .filter((p) => p.active);
+
+    // Get division rules for user's properties only
+    const propertyIds = properties.map((p) => p.property_id);
     const { data: divisionRules, error: rulesError } = await supabase
       .from("division_rule_default")
-      .select("*");
+      .select("*")
+      .in("property_id", propertyIds);
 
     if (rulesError) throw rulesError;
 
     let utilityActuals = [];
     if (property_id && month_start) {
-      const { data, error } = await supabase
-        .from("utility_actual")
-        .select("*")
-        .eq("property_id", property_id)
-        .eq("month_start", month_start);
+      // Verify user has access to this property
+      const hasAccess = properties.some((p) => p.property_id == property_id);
+      if (hasAccess) {
+        const { data, error } = await supabase
+          .from("utility_actual")
+          .select("*")
+          .eq("property_id", property_id)
+          .eq("month_start", month_start);
 
-      if (error) throw error;
-      utilityActuals = data;
+        if (error) throw error;
+        utilityActuals = data;
+      }
     }
 
     res.json({
@@ -310,13 +380,64 @@ app.post("/run-bill", async (req, res) => {
   }
 });
 
-// GET /dump-all - 全テーブルダンプ
+// GET /dump-all - 全テーブルダンプ（ユーザーが管理するプロパティのデータのみ）
 app.get("/dump-all", async (req, res) => {
   try {
-    const tables = [
-      "property",
-      "app_user",
-      "user_property",
+    const userId = req.user.id;
+
+    // Get user's property IDs first
+    const { data: userProperties, error: userPropsError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId);
+
+    if (userPropsError) throw userPropsError;
+
+    const propertyIds = userProperties.map((up) => up.property_id);
+
+    const dump = {};
+
+    // Get properties that user manages
+    const { data: properties, error: propertiesError } = await supabase
+      .from("property")
+      .select("*")
+      .in("property_id", propertyIds);
+
+    if (propertiesError) {
+      console.error("Error fetching properties:", propertiesError);
+      dump.property = { error: propertiesError.message };
+    } else {
+      dump.property = properties;
+    }
+
+    // Get app_user data for the current user
+    const { data: appUser, error: appUserError } = await supabase
+      .from("app_user")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (appUserError) {
+      console.error("Error fetching app_user:", appUserError);
+      dump.app_user = { error: appUserError.message };
+    } else {
+      dump.app_user = appUser;
+    }
+
+    // Get user_property data for the current user
+    const { data: userProperty, error: userPropertyError } = await supabase
+      .from("user_property")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (userPropertyError) {
+      console.error("Error fetching user_property:", userPropertyError);
+      dump.user_property = { error: userPropertyError.message };
+    } else {
+      dump.user_property = userProperty;
+    }
+
+    // Get data for tables that are filtered by property_id
+    const propertyFilteredTables = [
       "stay_record",
       "break_record",
       "tenant_rent",
@@ -328,10 +449,11 @@ app.get("/dump-all", async (req, res) => {
       "ledger",
     ];
 
-    const dump = {};
-
-    for (const table of tables) {
-      const { data, error } = await supabase.from(table).select("*");
+    for (const table of propertyFilteredTables) {
+      const { data, error } = await supabase
+        .from(table)
+        .select("*")
+        .in("property_id", propertyIds);
 
       if (error) {
         console.error(`Error fetching ${table}:`, error);

@@ -1,7 +1,3 @@
-"use client";
-
-import { useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,28 +8,14 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  BarChart3,
-  Home,
-  Users,
-  DollarSign,
-  FileText,
-  Settings,
-  HelpCircle,
   TrendingUp,
   TrendingDown,
   Plus,
   Download,
   Eye,
+  DollarSign,
+  Users,
 } from "lucide-react";
-
-// ナビゲーション項目
-const navigationItems = [
-  { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-  { id: "properties", label: "Properties", icon: Home },
-  { id: "tenants", label: "Tenants", icon: Users },
-  { id: "billing", label: "Billing", icon: DollarSign },
-  { id: "ledger", label: "Ledger", icon: FileText },
-];
 
 // ページコンテンツ
 const pageContents = {
@@ -352,110 +334,5 @@ const pageContents = {
 };
 
 export default function OwnerDashboard() {
-  const [activePage, setActivePage] = useState("dashboard");
-
-  const currentPage = pageContents[activePage as keyof typeof pageContents];
-
-  return (
-    <div className="h-screen flex bg-gray-50">
-      {/* ナビゲーションバー（左側18%） */}
-      <div className="w-[18%] bg-white shadow-lg flex flex-col border-r border-gray-200">
-        {/* ロゴ・アプリ名 */}
-        <div className="p-6">
-          <div className="flex items-center" style={{ gap: "8px" }}>
-            <Image
-              src="/app_logo.png"
-              alt="RentCalc Logo"
-              width={32}
-              height={32}
-              className="w-8 h-8"
-            />
-            <h1 className="text-xl font-bold text-gray-900">RentCalc</h1>
-          </div>
-        </div>
-
-        {/* ナビゲーション項目 */}
-        <nav className="flex-1 px-4 pb-4" style={{ paddingTop: "32px" }}>
-          <div className="flex flex-col" style={{ gap: "24px" }}>
-            {navigationItems.map((item) => {
-              const IconComponent = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActivePage(item.id)}
-                  className={`w-full flex items-center space-x-8 px-12 py-8 text-left transition-colors border-0 ${
-                    activePage === item.id
-                      ? "text-blue-700 font-semibold"
-                      : "text-gray-600 hover:text-blue-700"
-                  }`}
-                  style={{
-                    backgroundColor: "white",
-                    transition:
-                      "background-color 0.2s ease, border-radius 0.2s ease",
-                    borderRadius: "8px",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "#dbeafe";
-                    e.currentTarget.style.color = "#1d4ed8";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "white";
-                    e.currentTarget.style.color = "";
-                  }}
-                >
-                  <IconComponent
-                    className="h-10 w-10 !h-10 !w-10"
-                    style={{ height: "40px", width: "40px" }}
-                  />
-                  <span
-                    className="text-2xl !text-2xl"
-                    style={{ fontSize: "24px" }}
-                  >
-                    {item.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-      </div>
-
-      {/* コンテンツエリア（右側82%） */}
-      <div className="flex-1 flex flex-col">
-        {/* ヘッダー（上部10%） */}
-        <header
-          className="h-1/10 bg-white shadow-sm border-b border-gray-200 px-8 flex items-center"
-          style={{ paddingLeft: "30px" }}
-        >
-          <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-gray-900">
-              {currentPage.title}
-            </h1>
-          </div>
-
-          {/* ユーザーアバター・名前（右上） */}
-          <div className="ml-auto flex items-center">
-            <Image
-              src="/user_icon.png"
-              alt="User Avatar"
-              width={40}
-              height={40}
-              className="w-10 h-10 rounded-full mr-8"
-            />
-            <p
-              className="font-semibold text-gray-900"
-              style={{ fontSize: "20px" }}
-            >
-              John Doe
-            </p>
-          </div>
-        </header>
-
-        {/* メインコンテンツ（下部90%） */}
-        <main className="flex-1 overflow-y-auto bg-gray-50">
-          {currentPage.content}
-        </main>
-      </div>
-    </div>
-  );
+  return pageContents.dashboard.content;
 }

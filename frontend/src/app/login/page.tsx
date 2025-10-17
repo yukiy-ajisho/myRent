@@ -22,7 +22,7 @@ export default function LoginPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        router.push("/admin");
+        router.push("/owner/dashboard");
       }
     };
 

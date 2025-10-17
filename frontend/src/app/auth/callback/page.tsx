@@ -62,11 +62,11 @@ export default function AuthCallback() {
 
           if (data.session) {
             console.log(
-              "AuthCallback: Session established, redirecting to admin"
+              "AuthCallback: Session established, redirecting to owner dashboard"
             );
             // Clear the code verifier after successful exchange
             clearCodeVerifier();
-            router.push("/admin");
+            router.push("/owner/dashboard");
             return;
           }
         }
@@ -87,8 +87,10 @@ export default function AuthCallback() {
         }
 
         if (session?.user) {
-          console.log("AuthCallback: User found, redirecting to admin");
-          router.push("/admin");
+          console.log(
+            "AuthCallback: User found, redirecting to owner dashboard"
+          );
+          router.push("/owner/dashboard");
           return;
         }
 
