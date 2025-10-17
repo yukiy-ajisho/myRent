@@ -190,20 +190,30 @@ app.post("/add-tenant", async (req, res) => {
       return res.status(403).json({ error: "Access denied to this property" });
     }
 
-    // 既存テナントかチェック（内部処理のみ）
-    const { data: existingTenant, error: searchError } = await supabase
+    // 既存ユーザーかチェック（メールアドレスのみで検索）
+    const { data: existingUser, error: searchError } = await supabase
       .from("app_user")
-      .select("user_id")
-      .eq("name", name)
+      .select("user_id, user_type, name")
       .eq("email", email)
-      .eq("user_type", "tenant")
       .single();
 
     let tenantUserId;
 
-    if (existingTenant) {
+    if (existingUser) {
+      // 既存ユーザーが見つかった場合
+      if (existingUser.user_type === "owner") {
+        return res.status(400).json({ error: "Cannot add owner as tenant" });
+      }
+
+      // 既存テナントの場合、名前が異なる場合は警告
+      if (existingUser.name !== name) {
+        return res.status(400).json({
+          error: `Email already exists with different name (${existingUser.name}). Please use the same name or different email.`,
+        });
+      }
+
       // 既存テナントの場合
-      tenantUserId = existingTenant.user_id;
+      tenantUserId = existingUser.user_id;
 
       // 既にこのプロパティに所属していないかチェック
       const { data: existingRelation } = await supabase
@@ -247,7 +257,7 @@ app.post("/add-tenant", async (req, res) => {
 
     res.json({
       success: true,
-      message: existingTenant
+      message: existingUser
         ? "Existing tenant added to property"
         : "New tenant created and added to property",
     });
