@@ -162,4 +162,9 @@ export const api = {
   getBillLineData: (propertyId: string) => {
     return apiRequest(`/bill-line/${propertyId}`);
   },
+
+  // Get rent data for a specific property
+  getRentData: (propertyId: string) => {
+    return apiRequest(`/rent-data/${propertyId}`);
+  },
 };

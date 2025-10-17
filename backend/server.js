@@ -172,6 +172,65 @@ app.get("/bill-line/:propertyId", async (req, res) => {
   }
 });
 
+// GET /rent-data/:propertyId - プロパティ固有の家賃データ取得
+app.get("/rent-data/:propertyId", async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user.id;
+
+    // ユーザーがこのプロパティにアクセス権限があるかチェック
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (accessError || !userProperty) {
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // テナント家賃データを取得
+    const { data: tenantRents, error: rentsError } = await supabase
+      .from("tenant_rent")
+      .select("*")
+      .eq("property_id", propertyId);
+
+    if (rentsError) throw rentsError;
+
+    // テナントユーザーを取得
+    const { data: userPropertiesForTenants, error: userPropsError } =
+      await supabase
+        .from("user_property")
+        .select(
+          `
+        user_id,
+        app_user!inner(
+          user_id,
+          name,
+          email,
+          user_type
+        )
+      `
+        )
+        .eq("property_id", propertyId);
+
+    if (userPropsError) throw userPropsError;
+
+    const tenants = userPropertiesForTenants
+      .map((up) => up.app_user)
+      .filter((user) => user.user_type === "tenant");
+
+    res.json({
+      tenants,
+      tenantRents,
+    });
+  } catch (error) {
+    console.error("Rent data error:", error);
+    res.status(500).json({ error: "Failed to fetch rent data" });
+  }
+});
+
 // GET /bootstrap - 初期データ取得（ユーザーが管理するプロパティのみ）
 app.get("/bootstrap", async (req, res) => {
   try {
@@ -210,9 +269,13 @@ app.get("/bootstrap", async (req, res) => {
     if (rulesError) throw rulesError;
 
     let utilityActuals = [];
+    let tenantRents = [];
+
     if (property_id && month_start) {
       // Verify user has access to this property
-      const hasAccess = properties.some((p) => p.property_id == property_id);
+      const hasAccess = properties.some(
+        (p) => String(p.property_id) === String(property_id)
+      );
       if (hasAccess) {
         const { data, error } = await supabase
           .from("utility_actual")
@@ -225,10 +288,68 @@ app.get("/bootstrap", async (req, res) => {
       }
     }
 
+    // Get tenant rents and tenant users for user's properties only
+    let tenants = [];
+    if (property_id) {
+      console.log("=== BOOTSTRAP DEBUG ===");
+      console.log("Property ID:", property_id);
+      console.log(
+        "Available properties:",
+        properties.map((p) => ({ id: p.property_id, name: p.name }))
+      );
+
+      const hasAccess = properties.some(
+        (p) => String(p.property_id) === String(property_id)
+      );
+      console.log("Has access to property:", hasAccess);
+
+      if (hasAccess) {
+        // Get tenant rents
+        console.log("Fetching tenant rents...");
+        const { data, error } = await supabase
+          .from("tenant_rent")
+          .select("*")
+          .eq("property_id", property_id);
+
+        if (error) throw error;
+        tenantRents = data;
+        console.log("Tenant rents found:", tenantRents);
+
+        // Get tenant users for this property
+        console.log("Fetching tenant users...");
+        const { data: userProperties, error: userPropsError } = await supabase
+          .from("user_property")
+          .select(
+            `
+            user_id,
+            app_user!inner(
+              user_id,
+              name,
+              email,
+              user_type
+            )
+          `
+          )
+          .eq("property_id", property_id);
+
+        if (userPropsError) throw userPropsError;
+        console.log("User properties found:", userProperties);
+
+        tenants = userProperties
+          .map((up) => up.app_user)
+          .filter((user) => user.user_type === "tenant");
+        console.log("Filtered tenants:", tenants);
+      } else {
+        console.log("No access to property, skipping tenant data");
+      }
+    }
+
     res.json({
       properties,
       divisionRules,
       utilityActuals,
+      tenantRents,
+      tenants,
     });
   } catch (error) {
     console.error("Bootstrap error:", error);
