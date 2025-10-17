@@ -7,25 +7,15 @@ import { api } from "@/lib/api";
 // Bill Line データの型定義
 interface BillLine {
   bill_line_id: string;
-  property_id: string;
   user_id: string;
-  utility_id: string;
+  utility: string;
   amount: number;
-  created_at: string;
-  property: {
-    property_id: string;
+  bill_run_id: string;
+  app_user: {
     name: string;
-    timezone: string;
   };
-  user: {
-    user_id: string;
-    name: string;
-    email: string;
-  };
-  utility: {
-    utility_id: string;
-    name: string;
-    unit: string;
+  bill_run: {
+    month_start: string;
   };
 }
 
@@ -51,6 +41,12 @@ export default function History() {
 
       const data = await api.getBillLineData(selectedProperty.property_id);
       console.log("API Response:", data);
+      console.log("Bill Lines:", data.billLines);
+      if (data.billLines && data.billLines.length > 0) {
+        console.log("First bill line:", data.billLines[0]);
+        console.log("app_user:", data.billLines[0].app_user);
+        console.log("bill_run:", data.billLines[0].bill_run);
+      }
       setBillLines(data.billLines || []);
     } catch (err) {
       console.error("=== ERROR DETAILS ===");
@@ -101,11 +97,10 @@ export default function History() {
             border: "1px solid #ccc",
           }}
         >
-          <div>ID: {billLine.bill_line_id}</div>
-          <div>金額: ¥{billLine.amount.toLocaleString()}</div>
-          <div>ユーザーID: {billLine.user_id}</div>
-          <div>ユーティリティID: {billLine.utility_id}</div>
-          <div>Bill Run ID: {billLine.bill_run_id}</div>
+          <div>Tenant name: {billLine.app_user?.name || "不明"}</div>
+          <div>Amount: ${billLine.amount.toLocaleString()}</div>
+          <div>Utility: {billLine.utility}</div>
+          <div>Month: {billLine.bill_run?.month_start || "不明"}</div>
         </div>
       ))}
     </div>

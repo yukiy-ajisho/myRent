@@ -137,13 +137,33 @@ app.get("/bill-line/:propertyId", async (req, res) => {
     // 2. bill_run_idのリストを取得
     const billRunIds = billRuns.map((run) => run.bill_run_id);
 
-    // 3. bill_run_idでbill_lineテーブルからデータを取得
+    // 3. bill_run_idでbill_lineテーブルからデータを取得（関連テーブルも含む）
     const { data: billLines, error } = await supabase
       .from("bill_line")
-      .select("*")
+      .select(
+        `
+        bill_line_id,
+        user_id,
+        utility,
+        amount,
+        bill_run_id,
+        app_user!left(name),
+        bill_run!left(month_start)
+      `
+      )
       .in("bill_run_id", billRunIds);
 
-    if (error) throw error;
+    if (error) {
+      console.error("Bill line query error:", error);
+      throw error;
+    }
+
+    console.log("Bill lines fetched:", billLines);
+    if (billLines && billLines.length > 0) {
+      console.log("First bill line:", billLines[0]);
+      console.log("app_user:", billLines[0].app_user);
+      console.log("bill_run:", billLines[0].bill_run);
+    }
 
     res.json({ billLines });
   } catch (error) {
