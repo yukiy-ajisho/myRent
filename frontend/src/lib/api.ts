@@ -50,21 +50,6 @@ export const api = {
     });
   },
 
-  // Save stay periods
-  saveStayPeriods: (data: {
-    property_id: string;
-    stay_periods: Record<string, { startDate: string; endDate: string }>;
-    break_periods?: Record<
-      string,
-      Array<{ breakStart: string; breakEnd: string }>
-    >;
-  }) => {
-    return apiRequest("/save-stay-periods", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
   // Save utility actual
   saveUtilityActual: (data: {
     property_id: string;
@@ -199,7 +184,7 @@ export const api = {
   },
 
   // Create new property
-  createProperty: (data: { name: string; address: string }) => {
+  createPropertyForOwner: (data: { name: string; address: string }) => {
     return apiRequest("/properties", {
       method: "POST",
       body: JSON.stringify(data),
@@ -209,5 +194,40 @@ export const api = {
   // Get stay data for a specific property
   getStayData: (propertyId: string) => {
     return apiRequest(`/stay-data/${propertyId}`);
+  },
+
+  // Save stay periods
+  saveStayPeriods: (data: {
+    propertyId: string;
+    stayPeriods: Record<string, { startDate: string; endDate: string | null }>;
+    breakPeriods?: Record<
+      string,
+      Array<{ breakStart: string; breakEnd: string }>
+    >;
+  }) => {
+    return apiRequest("/save-stay-periods", {
+      method: "POST",
+      body: JSON.stringify({
+        property_id: data.propertyId,
+        stay_periods: data.stayPeriods,
+        break_periods: data.breakPeriods,
+      }),
+    });
+  },
+
+  // Run bill calculation
+  runBillCalculation: (data: {
+    propertyId: string;
+    monthStart: string;
+    stayPeriods?: Record<string, { startDate: string; endDate: string | null }>;
+  }) => {
+    return apiRequest("/run-bill", {
+      method: "POST",
+      body: JSON.stringify({
+        property_id: data.propertyId,
+        month_start: data.monthStart,
+        stay_periods: data.stayPeriods,
+      }),
+    });
   },
 };

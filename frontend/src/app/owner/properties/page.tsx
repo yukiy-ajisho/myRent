@@ -66,7 +66,7 @@ export default function Properties() {
     setMessage("");
 
     try {
-      await api.createProperty({
+      await api.createPropertyForOwner({
         name: formData.name.trim(),
         address: formData.address.trim(),
       });

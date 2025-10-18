@@ -695,6 +695,19 @@ app.post("/add-tenant", async (req, res) => {
 
     if (relationError) throw relationError;
 
+    // 初期レジャーレコードを作成
+    const sourceId = Math.floor(Math.random() * 1000000000); // int8型
+    const { error: ledgerError } = await supabase.from("ledger").insert({
+      user_id: tenantUserId,
+      property_id: parseInt(propertyId),
+      source_type: "initial",
+      source_id: sourceId, // ランダム数値を使用
+      amount: 0, // 開始残高
+      posted_at: new Date().toISOString(),
+    });
+
+    if (ledgerError) throw ledgerError;
+
     res.json({
       success: true,
       message: existingUser
@@ -930,10 +943,30 @@ app.post("/save-division-rules", async (req, res) => {
   }
 });
 
-// POST /save-stay-periods - 滞在期間保存
+// POST /save-stay-periods - 滞在期間保存 (SECURE VERSION)
 app.post("/save-stay-periods", async (req, res) => {
   try {
     const { property_id, stay_periods, break_periods } = req.body;
+    const userId = req.user.id; // ← ADD AUTHENTICATION
+
+    console.log(
+      `[SECURITY] User ${userId} saving stay periods for property ${property_id}`
+    );
+
+    // ← ADD AUTHORIZATION CHECK
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", property_id)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${property_id}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
 
     if (!property_id || !stay_periods) {
       return res.status(400).json({ error: "Invalid request data" });
@@ -954,15 +987,15 @@ app.post("/save-stay-periods", async (req, res) => {
       await supabase.from("break_record").delete().in("stay_id", stayIds);
     }
 
-    // Insert new stay records
-    const stayRecords = Object.entries(stay_periods).map(
-      ([user_id, period]) => ({
+    // Insert new stay records (only if at least start_date is provided)
+    const stayRecords = Object.entries(stay_periods)
+      .filter(([user_id, period]) => period.startDate) // Only include records with start_date
+      .map(([user_id, period]) => ({
         user_id,
         property_id: parseInt(property_id),
         start_date: period.startDate,
-        end_date: period.endDate,
-      })
-    );
+        end_date: period.endDate || null,
+      }));
 
     if (stayRecords.length > 0) {
       const { error: insertError } = await supabase
@@ -994,11 +1027,14 @@ app.post("/save-stay-periods", async (req, res) => {
         const stay_id = userToStayId[user_id];
         if (stay_id) {
           breaks.forEach((breakPeriod) => {
-            breakRecords.push({
-              stay_id,
-              break_start: breakPeriod.breakStart,
-              break_end: breakPeriod.breakEnd,
-            });
+            // Only create break records if both dates are provided
+            if (breakPeriod.breakStart && breakPeriod.breakEnd) {
+              breakRecords.push({
+                stay_id,
+                break_start: breakPeriod.breakStart,
+                break_end: breakPeriod.breakEnd,
+              });
+            }
           });
         }
       });
@@ -1012,6 +1048,10 @@ app.post("/save-stay-periods", async (req, res) => {
       }
     }
 
+    console.log(
+      `[SECURITY] Stay periods saved successfully for property ${property_id}`
+    );
+
     res.json({
       ok: true,
       stay_records_saved: stayRecords.length,
@@ -1020,7 +1060,7 @@ app.post("/save-stay-periods", async (req, res) => {
         : 0,
     });
   } catch (error) {
-    console.error("Save stay periods error:", error);
+    console.error("[SECURITY] Save stay periods error:", error);
     res.status(500).json({ error: "Failed to save stay periods" });
   }
 });
