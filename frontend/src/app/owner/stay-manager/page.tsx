@@ -401,17 +401,13 @@ export default function StayManager() {
                           <p className="text-sm">
                             <span className="font-medium">Start:</span>{" "}
                             {stayRecord?.start_date
-                              ? new Date(
-                                  stayRecord.start_date
-                                ).toLocaleDateString()
+                              ? stayRecord.start_date.split("T")[0]
                               : "Not set"}
                           </p>
                           <p className="text-sm">
                             <span className="font-medium">End:</span>{" "}
                             {stayRecord?.end_date
-                              ? new Date(
-                                  stayRecord.end_date
-                                ).toLocaleDateString()
+                              ? stayRecord.end_date.split("T")[0]
                               : "Ongoing"}
                           </p>
                         </div>
@@ -493,7 +489,8 @@ export default function StayManager() {
                           ))}
                           {currentBreakPeriods.length === 0 && (
                             <p className="text-sm text-gray-500 italic">
-                              No break periods. Click "Add Break" to add one.
+                              No break periods. Click &quot;Add Break&quot; to
+                              add one.
                             </p>
                           )}
                         </div>
@@ -507,15 +504,11 @@ export default function StayManager() {
                               >
                                 <p className="text-sm">
                                   <span className="font-medium">Start:</span>{" "}
-                                  {new Date(
-                                    breakRecord.break_start
-                                  ).toLocaleDateString()}
+                                  {breakRecord.break_start.split("T")[0]}
                                 </p>
                                 <p className="text-sm">
                                   <span className="font-medium">End:</span>{" "}
-                                  {new Date(
-                                    breakRecord.break_end
-                                  ).toLocaleDateString()}
+                                  {breakRecord.break_end.split("T")[0]}
                                 </p>
                               </div>
                             ))
