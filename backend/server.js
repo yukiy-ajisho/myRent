@@ -1135,13 +1135,76 @@ app.post("/utility-actual", async (req, res) => {
 app.post("/run-bill", async (req, res) => {
   try {
     const { property_id, month_start, stay_periods } = req.body;
+    const userId = req.user.id;
 
     if (!property_id || !month_start) {
       return res.status(400).json({ error: "Invalid request data" });
     }
 
+    console.log(
+      `[SECURITY] User ${userId} requesting bill calculation for property ${property_id}`
+    );
+
+    // 1. オーナー権限の確認
+    const { data: ownerCheck, error: ownerError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (ownerError || !ownerCheck || ownerCheck.user_type !== "owner") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not an owner`);
+      return res
+        .status(403)
+        .json({ error: "Owner access required for bill calculation" });
+    }
+
+    // 2. プロパティアクセス権限の確認
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", property_id)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${property_id}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 3. 重複計算の防止（同じ月の計算が既に存在するかチェック）
+    const { data: existingBillRun, error: billRunError } = await supabase
+      .from("bill_run")
+      .select("bill_run_id, status")
+      .eq("property_id", property_id)
+      .eq("month_start", month_start)
+      .single();
+
+    if (billRunError && billRunError.code !== "PGRST116") {
+      throw billRunError;
+    }
+
+    if (existingBillRun && existingBillRun.status === "closed") {
+      console.log(
+        `[SECURITY] Calculation already completed for property ${property_id}, month ${month_start}`
+      );
+      return res
+        .status(409)
+        .json({ error: "Bill calculation already completed for this month" });
+    }
+
+    console.log(
+      `[SECURITY] Starting bill calculation for property ${property_id}, month ${month_start}`
+    );
+
     // Calculate bills
     const result = await calculateBills(property_id, month_start, stay_periods);
+
+    console.log(
+      `[SECURITY] Bill calculation completed for property ${property_id}: ${result.lines_created} lines, ${result.ledger_records_created} ledger records`
+    );
 
     res.json(result);
   } catch (error) {

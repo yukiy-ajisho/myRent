@@ -108,15 +108,54 @@ export default function Calculate() {
     }
   };
 
+  // Input validation functions
+  const validateUtilityAmount = (amount: string): boolean => {
+    if (!amount || amount.trim() === "") return true; // Empty is allowed
+    const num = parseFloat(amount);
+    return !isNaN(num) && num >= 0 && num <= 999999; // 上限設定
+  };
+
+  const validateMonth = (month: string): boolean => {
+    if (!month) return false;
+    const selectedDate = new Date(month + "-01");
+    const now = new Date();
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return selectedDate <= currentMonth; // 未来の月は選択不可
+  };
+
   const handleCalculate = async () => {
     if (!selectedProperty || !selectedMonth) {
       setMessage("Please select property and month");
       return;
     }
 
+    // Validate month (prevent future month calculations)
+    if (!validateMonth(selectedMonth)) {
+      setMessage("Cannot calculate bills for future months");
+      return;
+    }
+
+    // Validate utility amounts
+    const invalidUtilities: string[] = [];
+    for (const [utility, amount] of Object.entries(utilityAmounts)) {
+      if (amount && amount.trim() !== "" && !validateUtilityAmount(amount)) {
+        invalidUtilities.push(utility);
+      }
+    }
+
+    if (invalidUtilities.length > 0) {
+      setMessage(
+        `Invalid amounts for utilities: ${invalidUtilities.join(
+          ", "
+        )}. Please enter values between 0 and 999,999.`
+      );
+      return;
+    }
+
     try {
       setIsCalculating(true);
       setMessage("");
+      setCalculationResult(null); // Clear previous results
 
       console.log("=== CALCULATION DEBUG ===");
       console.log("Property ID:", selectedProperty.property_id);
@@ -149,7 +188,17 @@ export default function Calculate() {
       await loadBillLines(selectedProperty.property_id);
     } catch (error) {
       console.error("Error running calculation:", error);
-      setMessage("Error running calculation");
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("Owner access required")) {
+        setMessage("Error: Owner access required for bill calculation");
+      } else if (errorMessage.includes("Access denied")) {
+        setMessage("Error: Access denied to this property");
+      } else if (errorMessage.includes("already completed")) {
+        setMessage("Error: Bill calculation already completed for this month");
+      } else {
+        setMessage("Error running calculation");
+      }
     } finally {
       setIsCalculating(false);
     }
@@ -216,8 +265,21 @@ export default function Calculate() {
             <input
               type="month"
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => {
+                const value = e.target.value;
+                // Real-time validation feedback
+                if (value && !validateMonth(value)) {
+                  e.target.setCustomValidity("Cannot select future months");
+                } else {
+                  e.target.setCustomValidity("");
+                }
+                setSelectedMonth(value);
+              }}
+              className={`px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                selectedMonth && !validateMonth(selectedMonth)
+                  ? "border-red-300 bg-red-50"
+                  : "border-gray-300"
+              }`}
             />
           </div>
           <div className="flex items-end">
@@ -267,15 +329,30 @@ export default function Calculate() {
                       type="number"
                       step="0.01"
                       min="0"
+                      max="999999"
                       value={utilityAmounts[utility] || ""}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Real-time validation feedback
+                        if (value && !validateUtilityAmount(value)) {
+                          e.target.setCustomValidity(
+                            "Please enter a value between 0 and 999,999"
+                          );
+                        } else {
+                          e.target.setCustomValidity("");
+                        }
                         setUtilityAmounts((prev) => ({
                           ...prev,
-                          [utility]: e.target.value,
-                        }))
-                      }
+                          [utility]: value,
+                        }));
+                      }}
                       placeholder="Enter amount"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                        utilityAmounts[utility] &&
+                        !validateUtilityAmount(utilityAmounts[utility])
+                          ? "border-red-300 bg-red-50"
+                          : "border-gray-300"
+                      }`}
                     />
                   </td>
                 </tr>
@@ -286,6 +363,11 @@ export default function Calculate() {
         <p className="text-sm text-gray-500 mt-3">
           Enter the actual utility costs for the selected month. These amounts
           will be used for bill calculations.
+          <br />
+          <span className="text-red-600 font-medium">
+            Note: Values must be between 0 and 999,999. Future months cannot be
+            calculated.
+          </span>
         </p>
       </div>
 
