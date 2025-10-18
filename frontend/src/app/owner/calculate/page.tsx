@@ -32,6 +32,16 @@ interface BillLine {
   };
 }
 
+interface UtilityActual {
+  actual_id: string;
+  property_id: string;
+  month_start: string;
+  utility: string;
+  amount: number;
+}
+
+const UTILITIES = ["electricity", "gas", "water", "internet", "garbage"];
+
 export default function Calculate() {
   const { selectedProperty } = useProperty();
   const [selectedMonth, setSelectedMonth] = useState("");
@@ -41,6 +51,9 @@ export default function Calculate() {
   const [calculationResult, setCalculationResult] =
     useState<CalculationResult | null>(null);
   const [billLines, setBillLines] = useState<BillLine[]>([]);
+  const [utilityAmounts, setUtilityAmounts] = useState<Record<string, string>>(
+    {}
+  );
 
   // Initialize with current month
   useEffect(() => {
@@ -52,6 +65,7 @@ export default function Calculate() {
   useEffect(() => {
     if (selectedProperty && selectedMonth) {
       loadBillLines(selectedProperty.property_id);
+      loadUtilityActuals(selectedProperty.property_id);
     }
   }, [selectedProperty, selectedMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -78,6 +92,22 @@ export default function Calculate() {
     }
   };
 
+  const loadUtilityActuals = async (propertyId: string) => {
+    try {
+      const data = await api.getBootstrap(propertyId, selectedMonth + "-01");
+      const utilityActuals = data.utilityActuals || [];
+
+      // Initialize utility amounts from existing data
+      const amounts: Record<string, string> = {};
+      utilityActuals.forEach((actual: UtilityActual) => {
+        amounts[actual.utility] = actual.amount.toString();
+      });
+      setUtilityAmounts(amounts);
+    } catch (error) {
+      console.error("Error loading utility actuals:", error);
+    }
+  };
+
   const handleCalculate = async () => {
     if (!selectedProperty || !selectedMonth) {
       setMessage("Please select property and month");
@@ -91,6 +121,18 @@ export default function Calculate() {
       console.log("=== CALCULATION DEBUG ===");
       console.log("Property ID:", selectedProperty.property_id);
       console.log("Month:", selectedMonth);
+
+      // Save utility amounts before calculation
+      for (const [utility, amount] of Object.entries(utilityAmounts)) {
+        if (amount && amount.trim() !== "") {
+          await api.saveUtilityActual({
+            property_id: selectedProperty.property_id,
+            month_start: `${selectedMonth}-01`,
+            utility,
+            amount: parseFloat(amount),
+          });
+        }
+      }
 
       const result = await api.runBillCalculation({
         propertyId: selectedProperty.property_id,
@@ -195,13 +237,63 @@ export default function Calculate() {
             </button>
           </div>
         </div>
-
-        {selectedMonth && (
-          <p className="text-sm text-gray-600">
-            Calculating bills for <strong>{formatMonth(selectedMonth)}</strong>
-          </p>
-        )}
       </div>
+
+      {/* Utilities Input Form */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Utility Amounts
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-r">
+                  Utility
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Amount ($)
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {UTILITIES.map((utility) => (
+                <tr key={utility}>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900 capitalize border-r">
+                    {utility}
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={utilityAmounts[utility] || ""}
+                      onChange={(e) =>
+                        setUtilityAmounts((prev) => ({
+                          ...prev,
+                          [utility]: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter amount"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-sm text-gray-500 mt-3">
+          Enter the actual utility costs for the selected month. These amounts
+          will be used for bill calculations.
+        </p>
+      </div>
+
+      {selectedMonth && (
+        <p className="text-sm text-gray-600">
+          Calculating bills for <strong>{formatMonth(selectedMonth)}</strong>
+        </p>
+      )}
 
       {/* Calculation Results */}
       {calculationResult && (
