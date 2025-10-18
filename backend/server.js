@@ -172,6 +172,182 @@ app.get("/bill-line/:propertyId", async (req, res) => {
   }
 });
 
+// GET /properties - オーナーのプロパティ一覧取得
+app.get("/properties", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting properties`);
+
+    // 1. オーナー権限の確認
+    const { data: ownerCheck, error: ownerError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (ownerError || !ownerCheck || ownerCheck.user_type !== "owner") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not an owner`);
+      return res.status(403).json({ error: "Owner access required" });
+    }
+
+    // 2. オーナーのプロパティを取得
+    const { data: userProperties, error: userPropsError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property_id,
+        property!inner(
+          property_id,
+          name,
+          active,
+          address
+        ),
+        app_user!inner(
+          user_type
+        )
+      `
+      )
+      .eq("user_id", userId)
+      .eq("app_user.user_type", "owner");
+
+    if (userPropsError) throw userPropsError;
+
+    console.log(
+      `[SECURITY] Found ${userProperties.length} properties for owner ${userId}`
+    );
+
+    // 3. 各プロパティのテナントを安全に取得
+    const propertiesWithTenants = await Promise.all(
+      userProperties.map(async (userProp) => {
+        const property = userProp.property;
+
+        // テナント情報を取得（プロパティ所有権は既に確認済み）
+        const { data: tenants, error: tenantsError } = await supabase
+          .from("user_property")
+          .select(`app_user!inner(name)`)
+          .eq("property_id", property.property_id)
+          .eq("app_user.user_type", "tenant");
+
+        if (tenantsError) throw tenantsError;
+
+        return {
+          property_id: property.property_id,
+          name: property.name,
+          active: property.active,
+          address: property.address,
+          tenants: tenants.map((t) => t.app_user.name),
+        };
+      })
+    );
+
+    res.json({ properties: propertiesWithTenants });
+  } catch (error) {
+    console.error("[SECURITY] Properties fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch properties" });
+  }
+});
+
+// POST /properties - 新しいプロパティ作成
+app.post("/properties", async (req, res) => {
+  try {
+    const { name, address } = req.body;
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} creating property: ${name}`);
+
+    // 1. 入力値検証
+    if (!name || !address) {
+      return res
+        .status(400)
+        .json({ error: "Property name and address are required" });
+    }
+
+    if (name.length > 100 || address.length > 200) {
+      return res
+        .status(400)
+        .json({ error: "Property name or address too long" });
+    }
+
+    // 2. オーナー権限の確認
+    const { data: ownerCheck, error: ownerError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (ownerError || !ownerCheck || ownerCheck.user_type !== "owner") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not an owner`);
+      return res.status(403).json({ error: "Owner access required" });
+    }
+
+    // 3. 重複プロパティ名チェック（同じオーナー内で）
+    const { data: existingProperties, error: checkError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property!inner(
+          name
+        ),
+        app_user!inner(
+          user_type
+        )
+      `
+      )
+      .eq("user_id", userId)
+      .eq("app_user.user_type", "owner");
+
+    if (checkError) throw checkError;
+
+    const duplicateProperty = existingProperties.find(
+      (up) => up.property.name.toLowerCase() === name.toLowerCase()
+    );
+
+    if (duplicateProperty) {
+      return res
+        .status(400)
+        .json({ error: "Property with this name already exists" });
+    }
+
+    // 4. プロパティ作成
+    const { data: newProperty, error: propertyError } = await supabase
+      .from("property")
+      .insert({
+        name: name.trim(),
+        address: address.trim(),
+        active: true,
+        owner_id: userId,
+      })
+      .select("property_id")
+      .single();
+
+    if (propertyError) throw propertyError;
+
+    console.log(`[SECURITY] Property created: ${newProperty.property_id}`);
+
+    // 5. オーナーとプロパティの関連付け
+    const { error: relationError } = await supabase
+      .from("user_property")
+      .insert({
+        user_id: userId,
+        property_id: newProperty.property_id,
+      });
+
+    if (relationError) throw relationError;
+
+    console.log(`[SECURITY] Property ownership created for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: "Property created successfully",
+      property_id: newProperty.property_id,
+    });
+  } catch (error) {
+    console.error("[SECURITY] Property creation error:", error);
+    res.status(500).json({ error: "Failed to create property" });
+  }
+});
+
 // GET /payments/:propertyId - プロパティの支払いレコード取得
 app.get("/payments/:propertyId", async (req, res) => {
   try {

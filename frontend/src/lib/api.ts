@@ -192,4 +192,17 @@ export const api = {
       method: "POST",
     });
   },
+
+  // Get owner's properties
+  getProperties: () => {
+    return apiRequest("/properties");
+  },
+
+  // Create new property
+  createProperty: (data: { name: string; address: string }) => {
+    return apiRequest("/properties", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
