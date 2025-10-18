@@ -172,6 +172,104 @@ app.get("/bill-line/:propertyId", async (req, res) => {
   }
 });
 
+// GET /stay-data/:propertyId - プロパティの滞在・休憩データ取得
+app.get("/stay-data/:propertyId", async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting stay data for property ${propertyId}`
+    );
+
+    // ユーザーがこのプロパティにアクセス権限があるかチェック
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${propertyId}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // テナントユーザーを取得
+    const { data: userPropertiesForTenants, error: userPropsError } =
+      await supabase
+        .from("user_property")
+        .select(
+          `
+        user_id,
+        app_user!inner(
+          user_id,
+          name,
+          email,
+          user_type
+        )
+      `
+        )
+        .eq("property_id", propertyId);
+
+    if (userPropsError) throw userPropsError;
+
+    const tenants = userPropertiesForTenants
+      .map((up) => up.app_user)
+      .filter((user) => user.user_type === "tenant");
+
+    console.log(
+      `[SECURITY] Found ${tenants.length} tenants for property ${propertyId}`
+    );
+
+    // 滞在記録を取得
+    const { data: stayRecords, error: stayError } = await supabase
+      .from("stay_record")
+      .select("*")
+      .eq("property_id", propertyId);
+
+    if (stayError) throw stayError;
+
+    console.log(
+      `[SECURITY] Found ${stayRecords.length} stay records for property ${propertyId}`
+    );
+
+    // 休憩記録を取得（stay_recordとJOIN）
+    const { data: breakRecords, error: breakError } = await supabase
+      .from("break_record")
+      .select(
+        `
+        break_id,
+        stay_id,
+        break_start,
+        break_end,
+        stay_record!inner(
+          user_id,
+          property_id
+        )
+      `
+      )
+      .eq("stay_record.property_id", propertyId);
+
+    if (breakError) throw breakError;
+
+    console.log(
+      `[SECURITY] Found ${breakRecords.length} break records for property ${propertyId}`
+    );
+
+    res.json({
+      tenants,
+      stayRecords,
+      breakRecords,
+    });
+  } catch (error) {
+    console.error("[SECURITY] Stay data error:", error);
+    res.status(500).json({ error: "Failed to fetch stay data" });
+  }
+});
+
 // GET /properties - オーナーのプロパティ一覧取得
 app.get("/properties", async (req, res) => {
   try {

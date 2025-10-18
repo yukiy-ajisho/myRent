@@ -205,4 +205,9 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Get stay data for a specific property
+  getStayData: (propertyId: string) => {
+    return apiRequest(`/stay-data/${propertyId}`);
+  },
 };
