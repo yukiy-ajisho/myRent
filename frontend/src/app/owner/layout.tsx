@@ -101,7 +101,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-screen flex bg-gray-50">
       {/* ナビゲーションバー（左側18%） */}
-      <div className="w-[18%] bg-white shadow-lg flex flex-col border-r border-gray-200">
+      <div className="w-[18%] h-screen bg-white shadow-lg flex flex-col border-r border-gray-200">
         {/* ロゴ・アプリ名 */}
         <div className="p-6">
           <div className="flex items-center" style={{ gap: "8px" }}>
@@ -120,8 +120,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* ナビゲーション項目 */}
-        <nav className="flex-1 px-4 pb-4" style={{ paddingTop: "32px" }}>
-          <div className="flex flex-col" style={{ gap: "24px" }}>
+        <nav
+          className="flex-1 px-4 pb-4 overflow-hidden"
+          style={{ paddingTop: "32px" }}
+        >
+          <div className="flex flex-col h-full" style={{ gap: "12px" }}>
             {navigationItems.map((item) => {
               const IconComponent = item.icon;
               const isActive = pathname === item.href;
@@ -140,6 +143,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                       "background-color 0.2s ease, border-radius 0.2s ease",
                     borderRadius: "8px",
                     color: isActive ? "#1d4ed8" : "#6b7280",
+                    padding: "8px 16px",
+                    margin: "2px 0",
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = "#dbeafe";

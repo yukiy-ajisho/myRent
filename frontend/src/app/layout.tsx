@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import "./globals.css";
 
 export default async function RootLayout({
   children,
