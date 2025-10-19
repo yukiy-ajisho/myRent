@@ -1213,6 +1213,96 @@ app.post("/run-bill", async (req, res) => {
   }
 });
 
+// GET /dashboard/:propertyId - ダッシュボードデータ取得
+app.get("/dashboard/:propertyId", async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting dashboard data for property ${propertyId}`
+    );
+
+    // 1. プロパティアクセス権限の確認
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${propertyId}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 2. プロパティに所属するテナントを取得
+    const { data: userProperties, error: userPropsError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        user_id,
+        app_user!inner(*)
+      `
+      )
+      .eq("property_id", propertyId);
+
+    if (userPropsError) throw userPropsError;
+
+    // テナントのみをフィルタリング（オーナーを除外）
+    const tenants = userProperties
+      .map((up) => up.app_user)
+      .filter((user) => user.user_type === "tenant");
+
+    console.log(
+      `[SECURITY] Found ${tenants.length} tenants for property ${propertyId}`
+    );
+
+    // 3. 各テナントの最新ledgerレコードを取得
+    const dashboardData = [];
+
+    for (const tenant of tenants) {
+      const { data: latestLedger, error: ledgerError } = await supabase
+        .from("ledger")
+        .select("amount, posted_at")
+        .eq("user_id", tenant.user_id)
+        .eq("property_id", propertyId)
+        .order("posted_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (ledgerError && ledgerError.code !== "PGRST116") {
+        console.error(
+          `Error fetching ledger for tenant ${tenant.user_id}:`,
+          ledgerError
+        );
+        continue;
+      }
+
+      dashboardData.push({
+        user_id: tenant.user_id,
+        name: tenant.name,
+        email: tenant.email,
+        current_balance: latestLedger ? latestLedger.amount : 0,
+        last_updated: latestLedger ? latestLedger.posted_at : null,
+      });
+    }
+
+    console.log(
+      `[SECURITY] Dashboard data prepared for property ${propertyId}: ${dashboardData.length} tenants`
+    );
+
+    res.json({
+      tenants: dashboardData,
+    });
+  } catch (error) {
+    console.error("Dashboard error:", error);
+    res.status(500).json({ error: "Failed to fetch dashboard data" });
+  }
+});
+
 // GET /dump-all - 全テーブルダンプ（ユーザーが管理するプロパティのデータのみ）
 app.get("/dump-all", async (req, res) => {
   try {

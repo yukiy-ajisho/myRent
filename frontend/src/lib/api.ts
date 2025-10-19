@@ -230,4 +230,9 @@ export const api = {
       }),
     });
   },
+
+  // Get dashboard data for a specific property
+  getDashboardData: (propertyId: string) => {
+    return apiRequest(`/dashboard/${propertyId}`);
+  },
 };
