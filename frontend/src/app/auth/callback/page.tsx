@@ -39,6 +39,7 @@ export default function AuthCallback() {
             "AuthCallback: Code verifier:",
             codeVerifier ? "found" : "not found"
           );
+          console.log("AuthCallback: Code verifier value:", codeVerifier);
 
           if (!codeVerifier) {
             console.error("AuthCallback: No code verifier found");
