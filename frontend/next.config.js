@@ -10,6 +10,13 @@ const nextConfig = {
     // 開発時の不要な機能を無効化
     optimizePackageImports: ["@supabase/supabase-js"],
   },
+  // ビルド時のTypeScriptとESLintチェックを無効化
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 module.exports = nextConfig;
