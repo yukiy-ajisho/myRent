@@ -47,7 +47,10 @@ export default function AuthCallback() {
             return;
           }
 
-          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession({
+            auth_code: code,
+            code_verifier: codeVerifier
+          });
           console.log("AuthCallback: Exchange result:", {
             data,
             exchangeError,
