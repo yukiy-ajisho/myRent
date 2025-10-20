@@ -13,21 +13,21 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  // useEffect(() => {
-  //   // Check if user is already logged in
-  //   const checkUser = async () => {
-  //     const supabase = createClient();
-  //     const {
-  //       data: { user },
-  //     } = await supabase.auth.getUser();
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkUser = async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  //     if (user) {
-  //       router.push("/owner/dashboard");
-  //     }
-  //   };
+      if (user) {
+        router.push("/owner/dashboard");
+      }
+    };
 
-  //   checkUser();
-  // }, [router]);
+    checkUser();
+  }, [router]);
 
   const handleSignIn = async () => {
     try {
