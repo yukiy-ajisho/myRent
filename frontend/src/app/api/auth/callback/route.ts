@@ -38,8 +38,14 @@ export async function GET(request: NextRequest) {
       console.log("Code:", code);
       console.log("Request URL:", requestUrl.toString());
 
-      // PKCEパラメータを自動的に処理するサーバーサイド認証
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      // PKCEのcode_verifierをCookieから取得
+      const codeVerifier = request.cookies.get("pkce_code_verifier")?.value;
+      console.log("Code Verifier:", codeVerifier ? "Found" : "Not found");
+
+      // PKCEパラメータを使用したサーバーサイド認証
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code, {
+        codeVerifier: codeVerifier,
+      });
 
       if (error) {
         console.error("Server-side exchange error:", error);
@@ -64,6 +70,16 @@ export async function GET(request: NextRequest) {
       }
 
       console.log("Session verified:", session.user?.email);
+
+      // 認証成功後にPKCE Cookieをクリア
+      const response = NextResponse.redirect(
+        `${requestUrl.origin}/owner/dashboard`
+      );
+      response.cookies.set("pkce_code_verifier", "", {
+        path: "/",
+        expires: new Date(0),
+      });
+      return response;
     } catch (error) {
       console.error("Unexpected server-side error:", error);
       return NextResponse.redirect(
@@ -74,7 +90,4 @@ export async function GET(request: NextRequest) {
     console.error("No authorization code provided");
     return NextResponse.redirect(`${requestUrl.origin}/login?error=no_code`);
   }
-
-  // 認証成功後にダッシュボードにリダイレクト
-  return NextResponse.redirect(`${requestUrl.origin}/owner/dashboard`);
 }
