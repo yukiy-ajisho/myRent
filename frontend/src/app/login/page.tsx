@@ -49,6 +49,8 @@ export default function LoginPage() {
           queryParams: {
             code_challenge: codeChallenge,
             code_challenge_method: "S256",
+            access_type: "offline",
+            prompt: "consent", // 強制的にGoogleの認証画面を表示
           },
         },
       });
