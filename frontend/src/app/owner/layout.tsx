@@ -12,9 +12,9 @@ import {
   FileText,
   Settings,
   TrendingUp,
-  ChevronDown,
 } from "lucide-react";
 import { PropertyProvider, useProperty } from "@/contexts/PropertyContext";
+import { UserProfile } from "@/components/UserProfile";
 
 // ナビゲーション項目
 const navigationItems = [
@@ -186,21 +186,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* ユーザーアバター・名前（右上） */}
-          <div className="ml-auto flex items-center">
-            <Image
-              src="/user_icon.png"
-              alt="User Avatar"
-              width={40}
-              height={40}
-              className="w-10 h-10 rounded-full mr-8"
-            />
-            <p
-              className="font-semibold text-gray-900"
-              style={{ fontSize: "20px" }}
-            >
-              John Doe
-            </p>
-          </div>
+          <UserProfile />
         </header>
 
         {/* メインコンテンツ（下部90%） */}
