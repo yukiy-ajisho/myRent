@@ -17,6 +17,17 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // 外部画像ドメインを許可
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+        port: "",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 module.exports = nextConfig;
