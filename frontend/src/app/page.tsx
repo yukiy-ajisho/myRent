@@ -8,8 +8,8 @@ export default async function Home() {
   } = await supabase.auth.getUser();
 
   if (user) {
-    // ユーザーの種類に応じてリダイレクト
-    redirect("/owner/dashboard");
+    // ユーザータイプ選択ページにリダイレクト
+    redirect("/user-type-selection");
   } else {
     redirect("/login");
   }

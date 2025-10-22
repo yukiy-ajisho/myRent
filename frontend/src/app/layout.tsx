@@ -17,7 +17,8 @@ export default async function RootLayout({
   if (
     !user &&
     typeof window !== "undefined" &&
-    !window.location.pathname.includes("/login")
+    !window.location.pathname.includes("/login") &&
+    !window.location.pathname.includes("/user-type-selection")
   ) {
     redirect("/login");
   }

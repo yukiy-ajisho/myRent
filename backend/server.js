@@ -2268,6 +2268,143 @@ app.post("/create-payment", async (req, res) => {
   }
 });
 
+// POST /select-user-type - ユーザータイプ選択
+app.post("/select-user-type", async (req, res) => {
+  try {
+    const { user_type } = req.body;
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} selecting user type: ${user_type}`);
+
+    // 1. 入力値検証
+    if (!user_type || !["owner", "tenant"].includes(user_type)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid user type. Must be 'owner' or 'tenant'",
+      });
+    }
+
+    // 2. 既にapp_userレコードが存在するかチェック
+    const { data: existingUser, error: checkError } = await supabase
+      .from("app_user")
+      .select("user_id, user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (checkError && checkError.code !== "PGRST116") {
+      throw checkError;
+    }
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: "User type already selected",
+      });
+    }
+
+    // 3. app_userテーブルにレコード作成
+    const { data: newUser, error: createError } = await supabase
+      .from("app_user")
+      .insert({
+        user_id: userId,
+        name: req.user.user_metadata?.full_name || "Unknown",
+        email: req.user.email,
+        user_type: user_type,
+        personal_multiplier: 1.0,
+      })
+      .select("user_id, user_type")
+      .single();
+
+    if (createError) {
+      console.error("Error creating app_user:", createError);
+      throw createError;
+    }
+
+    console.log(`[SECURITY] User type selected successfully: ${user_type}`);
+
+    res.json({
+      success: true,
+      user_id: newUser.user_id,
+      user_type: newUser.user_type,
+      message: "User type selected successfully",
+    });
+  } catch (error) {
+    console.error("[SECURITY] Select user type error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to select user type",
+    });
+  }
+});
+
+// GET /tenant-properties - テナントのプロパティ一覧取得
+app.get("/tenant-properties", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting tenant properties`);
+
+    // 1. ユーザーがテナントかチェック
+    const { data: user, error: userError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (user.user_type !== "tenant") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not a tenant`);
+      return res.status(403).json({
+        success: false,
+        error: "Tenant access required",
+      });
+    }
+
+    // 2. テナントのプロパティ一覧を取得
+    const { data: userProperties, error: propertiesError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property_id,
+        property:property_id (
+          property_id,
+          name,
+          active,
+          address
+        )
+      `
+      )
+      .eq("user_id", userId);
+
+    if (propertiesError) {
+      throw propertiesError;
+    }
+
+    // 3. アクティブなプロパティのみをフィルタリング
+    const activeProperties = userProperties
+      .map((up) => up.property)
+      .filter((property) => property && property.active);
+
+    console.log(
+      `[SECURITY] Found ${activeProperties.length} properties for tenant ${userId}`
+    );
+
+    res.json({
+      success: true,
+      properties: activeProperties,
+    });
+  } catch (error) {
+    console.error("[SECURITY] Tenant properties error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch tenant properties",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });

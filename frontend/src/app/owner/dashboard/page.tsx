@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { useProperty } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
+import { getAuthState } from "@/lib/auth-state-client";
+import { useRouter } from "next/navigation";
+import AccessDenied from "@/components/AccessDenied";
 
 interface DashboardTenant {
   user_id: string;
@@ -17,12 +20,48 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardTenant[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [authState, setAuthState] = useState<"checking" | "denied" | "allowed">(
+    "checking"
+  );
+  const router = useRouter();
 
   useEffect(() => {
-    if (selectedProperty) {
+    const checkAuth = async () => {
+      try {
+        const { state, user } = await getAuthState();
+
+        if (state === "unauthenticated") {
+          router.push("/login");
+          return;
+        }
+
+        if (state === "authenticating") {
+          router.push("/user-type-selection");
+          return;
+        }
+
+        if (state === "authenticated" && user) {
+          if (user.user_type !== "owner") {
+            setAuthState("denied");
+            return;
+          }
+
+          setAuthState("allowed");
+        }
+      } catch (error) {
+        console.error("Error checking auth state:", error);
+        router.push("/login");
+      }
+    };
+
+    checkAuth();
+  }, [router]);
+
+  useEffect(() => {
+    if (selectedProperty && authState === "allowed") {
       loadDashboardData(selectedProperty.property_id);
     }
-  }, [selectedProperty]);
+  }, [selectedProperty, authState]);
 
   const loadDashboardData = async (propertyId: string) => {
     try {
@@ -77,6 +116,21 @@ export default function Dashboard() {
     if (balance < 0) return "bg-red-50 border-red-200";
     return "bg-gray-50 border-gray-200";
   };
+
+  if (authState === "checking") {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <span className="ml-2">Checking permissions...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (authState === "denied") {
+    return <AccessDenied userType="tenant" attemptedPath="/owner/dashboard" />;
+  }
 
   if (!selectedProperty) {
     return (

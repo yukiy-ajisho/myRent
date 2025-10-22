@@ -235,4 +235,17 @@ export const api = {
   getDashboardData: (propertyId: string) => {
     return apiRequest(`/dashboard/${propertyId}`);
   },
+
+  // Select user type
+  selectUserType: (userType: "owner" | "tenant") => {
+    return apiRequest("/select-user-type", {
+      method: "POST",
+      body: JSON.stringify({ user_type: userType }),
+    });
+  },
+
+  // Get tenant properties
+  getTenantProperties: () => {
+    return apiRequest("/tenant-properties");
+  },
 };

@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
       // 認証成功後にPKCE Cookieをクリア
       const response = NextResponse.redirect(
-        `${requestUrl.origin}/owner/dashboard`
+        `${requestUrl.origin}/user-type-selection`
       );
       response.cookies.set("pkce_code_verifier", "", {
         path: "/",

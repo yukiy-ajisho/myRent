@@ -25,7 +25,12 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  if (req.nextUrl.pathname.startsWith("/owner")) {
+  // 基本的な認証チェック
+  if (
+    req.nextUrl.pathname.startsWith("/owner") ||
+    req.nextUrl.pathname.startsWith("/tenant") ||
+    req.nextUrl.pathname.startsWith("/user-type-selection")
+  ) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -38,9 +43,23 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // シンプルなリダイレクト
+  if (req.nextUrl.pathname === "/owner" || req.nextUrl.pathname === "/tenant") {
+    const url = req.nextUrl.clone();
+    url.pathname = "/user-type-selection";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
   return res;
 }
 
 export const config = {
-  matcher: ["/owner/:path*"],
+  matcher: [
+    "/owner",
+    "/owner/:path*",
+    "/tenant",
+    "/tenant/:path*",
+    "/user-type-selection",
+  ],
 };
