@@ -248,4 +248,9 @@ export const api = {
   getTenantProperties: () => {
     return apiRequest("/tenant-properties");
   },
+
+  // Get tenant bill history
+  getTenantBillHistory: () => {
+    return apiRequest("/tenant-bill-history");
+  },
 };

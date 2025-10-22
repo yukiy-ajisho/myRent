@@ -77,8 +77,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="h-screen flex bg-gray-50">
-      {/* ナビゲーションバー（左側15%） */}
-      <div className="w-[15%] h-screen bg-white shadow-lg flex flex-col border-r border-gray-200">
+      {/* ナビゲーションバー（左側18%） */}
+      <div className="w-[18%] h-screen bg-white shadow-lg flex flex-col border-r border-gray-200">
         {/* ロゴ・アプリ名 */}
         <div className="p-6">
           <div className="flex items-center" style={{ gap: "8px" }}>
@@ -151,7 +151,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </nav>
       </div>
 
-      {/* コンテンツエリア（右側85%） */}
+      {/* コンテンツエリア（右側82%） */}
       <div className="flex-1 flex flex-col">
         {/* ヘッダー（上部12%） */}
         <header

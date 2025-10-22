@@ -2405,6 +2405,107 @@ app.get("/tenant-properties", async (req, res) => {
   }
 });
 
+// GET /tenant-bill-history - テナント用Bill History
+app.get("/tenant-bill-history", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting tenant bill history`);
+
+    // 1. ユーザータイプを取得
+    const { data: user, error: userError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (userError) {
+      throw userError;
+    }
+
+    // 2. テナントかチェック
+    if (user.user_type !== "tenant") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not a tenant`);
+      return res.status(403).json({
+        success: false,
+        error: "Tenant access required",
+      });
+    }
+
+    // 3. テナントのプロパティ一覧を取得
+    const { data: userProperties, error: propertiesError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property_id,
+        property:property_id (
+          property_id,
+          name,
+          active,
+          address
+        )
+      `
+      )
+      .eq("user_id", userId);
+
+    if (propertiesError) {
+      throw propertiesError;
+    }
+
+    // 4. アクティブなプロパティのみをフィルタリング
+    const activeProperties = userProperties
+      .map((up) => up.property)
+      .filter((property) => property && property.active);
+
+    if (activeProperties.length === 0) {
+      console.log(`[SECURITY] No active properties found for tenant ${userId}`);
+      return res.json({
+        success: true,
+        properties: [],
+        billLines: [],
+      });
+    }
+
+    // 5. テナントのBill Lineデータを取得（全プロパティ対象）
+    const { data: billLines, error: billLinesError } = await supabase
+      .from("bill_line")
+      .select(
+        `
+        bill_line_id,
+        user_id,
+        utility,
+        amount,
+        bill_run_id,
+        bill_run:bill_run_id (
+          month_start,
+          property_id
+        )
+      `
+      )
+      .eq("user_id", userId);
+
+    if (billLinesError) {
+      throw billLinesError;
+    }
+
+    console.log(
+      `[SECURITY] Found ${billLines.length} bill lines for tenant ${userId}`
+    );
+
+    res.json({
+      success: true,
+      properties: activeProperties,
+      billLines: billLines || [],
+    });
+  } catch (error) {
+    console.error("[SECURITY] Tenant bill history error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch tenant bill history",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
