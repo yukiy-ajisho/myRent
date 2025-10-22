@@ -16,6 +16,9 @@ interface BillLine {
   bill_run: {
     month_start: string;
     property_id: string;
+    property: {
+      name: string;
+    };
   };
 }
 
@@ -90,6 +93,8 @@ export default function TenantHistoryPage() {
 
       const data = await api.getTenantBillHistory();
       console.log("API Response:", data);
+      console.log("First bill line:", data.billLines?.[0]);
+      console.log("Bill run structure:", data.billLines?.[0]?.bill_run);
 
       setProperties(data.properties || []);
       setBillLines(data.billLines || []);
@@ -170,14 +175,6 @@ export default function TenantHistoryPage() {
     );
   }
 
-  // Sort bill lines: first by bill_run_id (ascending), then by property_id (ascending)
-  // const sortedBillLines = billLines.sort((a, b) => {
-  //   if (a.bill_run_id !== b.bill_run_id) {
-  //     return a.bill_run_id - b.bill_run_id;
-  //   }
-  //   return a.property_id.localeCompare(b.property_id);
-  // });
-
   // ソートなしでそのまま表示
   const sortedBillLines = billLines;
 
@@ -208,6 +205,18 @@ export default function TenantHistoryPage() {
     const monthMatch = !selectedMonth || month === selectedMonth;
     const propertyMatch = !selectedProperty || propertyId === selectedProperty;
 
+    // デバッグログを追加
+    if (selectedProperty && propertyId) {
+      console.log(`Property Filter Debug:`, {
+        selectedProperty,
+        propertyId,
+        propertyIdType: typeof propertyId,
+        selectedPropertyType: typeof selectedProperty,
+        propertyMatch,
+        billLineUtility: billLine.utility,
+      });
+    }
+
     return yearMatch && monthMatch && propertyMatch;
   });
 
@@ -226,7 +235,18 @@ export default function TenantHistoryPage() {
             </label>
             <select
               value={selectedProperty}
-              onChange={(e) => setSelectedProperty(e.target.value)}
+              onChange={(e) => {
+                console.log(`Property selection changed:`, {
+                  selectedValue: e.target.value,
+                  selectedValueType: typeof e.target.value,
+                  availableProperties: properties.map((p) => ({
+                    id: p.property_id,
+                    name: p.name,
+                    idType: typeof p.property_id,
+                  })),
+                });
+                setSelectedProperty(e.target.value);
+              }}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Properties</option>
@@ -300,9 +320,6 @@ export default function TenantHistoryPage() {
       {/* Bill Lines List */}
       <div className="space-y-4">
         {filteredBillLines.map((billLine) => {
-          const property = properties.find(
-            (p) => p.property_id === billLine.bill_run?.property_id
-          );
           return (
             <div
               key={billLine.bill_line_id}
@@ -313,7 +330,9 @@ export default function TenantHistoryPage() {
                   <span className="text-sm font-medium text-gray-500">
                     Property:
                   </span>
-                  <p className="font-semibold">{property?.name || "Unknown"}</p>
+                  <p className="font-semibold">
+                    {billLine.bill_run?.property?.name || "Unknown"}
+                  </p>
                 </div>
                 <div>
                   <span className="text-sm font-medium text-gray-500">

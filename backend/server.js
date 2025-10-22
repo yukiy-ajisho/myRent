@@ -2471,16 +2471,19 @@ app.get("/tenant-bill-history", async (req, res) => {
       .from("bill_line")
       .select(
         `
-        bill_line_id,
-        user_id,
-        utility,
-        amount,
-        bill_run_id,
-        bill_run:bill_run_id (
-          month_start,
-          property_id
-        )
-      `
+            bill_line_id,
+            user_id,
+            utility,
+            amount,
+            bill_run_id,
+            bill_run:bill_run_id (
+              month_start,
+              property_id,
+              property:property_id (
+                name
+              )
+            )
+          `
       )
       .eq("user_id", userId);
 
