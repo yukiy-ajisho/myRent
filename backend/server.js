@@ -2509,6 +2509,118 @@ app.get("/tenant-bill-history", async (req, res) => {
   }
 });
 
+// GET /tenant-payments - テナント用支払い履歴取得
+app.get("/tenant-payments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting tenant payments`);
+
+    // 1. ユーザータイプ確認
+    const { data: user, error: userError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (user.user_type !== "tenant") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not a tenant`);
+      return res.status(403).json({
+        success: false,
+        error: "Tenant access required",
+      });
+    }
+
+    // 2. テナントの所属プロパティ取得
+    const { data: userProperties, error: propertiesError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property_id,
+        property:property_id (
+          property_id,
+          name,
+          active,
+          address
+        )
+      `
+      )
+      .eq("user_id", userId);
+
+    if (propertiesError) {
+      throw propertiesError;
+    }
+
+    // アクティブなプロパティのみをフィルタリング
+    const activeProperties = userProperties
+      .map((up) => up.property)
+      .filter((property) => property && property.active);
+
+    // 3. テナントの支払い履歴取得
+    const { data: payments, error: paymentsError } = await supabase
+      .from("payment")
+      .select(
+        `
+        payment_id,
+        user_id,
+        property_id,
+        amount,
+        note,
+        paid_at,
+        property:property_id (
+          name
+        )
+      `
+      )
+      .eq("user_id", userId)
+      .order("paid_at", { ascending: false });
+
+    if (paymentsError) {
+      throw paymentsError;
+    }
+
+    // 4. 各支払いの承認ステータス確認
+    const paymentsWithStatus = await Promise.all(
+      payments.map(async (payment) => {
+        const { data: ledgerRecord, error: ledgerError } = await supabase
+          .from("ledger")
+          .select("ledger_id")
+          .eq("user_id", payment.user_id)
+          .eq("property_id", payment.property_id)
+          .eq("source_type", "payment")
+          .eq("source_id", payment.payment_id)
+          .single();
+
+        // エラーは無視（レコードが存在しない場合）
+        return {
+          ...payment,
+          isAccepted: !!ledgerRecord,
+        };
+      })
+    );
+
+    console.log(
+      `[SECURITY] Found ${paymentsWithStatus.length} payments for tenant ${userId}`
+    );
+
+    res.json({
+      success: true,
+      payments: paymentsWithStatus || [],
+      userProperties: activeProperties || [],
+    });
+  } catch (error) {
+    console.error("[SECURITY] Tenant payments error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch tenant payments",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });

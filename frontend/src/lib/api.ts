@@ -8,7 +8,13 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     data: { session },
   } = await supabase.auth.getSession();
 
+  console.log("=== API REQUEST DEBUG ===");
+  console.log("Endpoint:", endpoint);
+  console.log("Session:", session);
+  console.log("Access token:", session?.access_token);
+
   if (!session) {
+    console.error("No session found");
     throw new Error("No session found");
   }
 
@@ -21,9 +27,24 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     },
   });
 
+  console.log("Response status:", response.status);
+  console.log(
+    "Response headers:",
+    Object.fromEntries(response.headers.entries())
+  );
+
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "API request failed");
+    const errorText = await response.text();
+    console.error("Error response:", errorText);
+
+    try {
+      const error = JSON.parse(errorText);
+      throw new Error(error.error || "API request failed");
+    } catch (parseError) {
+      throw new Error(
+        `API request failed: ${response.status} ${response.statusText}`
+      );
+    }
   }
 
   return response.json();
@@ -252,5 +273,10 @@ export const api = {
   // Get tenant bill history
   getTenantBillHistory: () => {
     return apiRequest("/tenant-bill-history");
+  },
+
+  // Get tenant payments
+  getTenantPayments: () => {
+    return apiRequest("/tenant-payments");
   },
 };
