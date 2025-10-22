@@ -54,6 +54,12 @@ export default function Calculate() {
   const [utilityAmounts, setUtilityAmounts] = useState<Record<string, string>>(
     {}
   );
+  const [saveStatus, setSaveStatus] = useState<
+    Record<string, "saving" | "saved" | "error">
+  >({});
+  const [debounceTimers, setDebounceTimers] = useState<
+    Record<string, NodeJS.Timeout>
+  >({});
 
   // Initialize with current month
   useEffect(() => {
@@ -68,6 +74,14 @@ export default function Calculate() {
       loadUtilityActuals(selectedProperty.property_id);
     }
   }, [selectedProperty, selectedMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // クリーンアップ処理
+  useEffect(() => {
+    return () => {
+      // コンポーネントアンマウント時にタイマーをクリア
+      Object.values(debounceTimers).forEach((timer) => clearTimeout(timer));
+    };
+  }, [debounceTimers]);
 
   const loadBillLines = async (propertyId: string) => {
     try {
@@ -121,6 +135,43 @@ export default function Calculate() {
     const now = new Date();
     const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     return selectedDate <= currentMonth; // 未来の月は選択不可
+  };
+
+  // デバウンス付きの保存関数
+  const debouncedSaveUtility = (utility: string, amount: string) => {
+    // 既存のタイマーをクリア
+    if (debounceTimers[utility]) {
+      clearTimeout(debounceTimers[utility]);
+    }
+
+    // 新しいタイマーを設定（500ms後）
+    const timer = setTimeout(async () => {
+      await saveSingleUtility(utility, amount);
+    }, 500);
+
+    setDebounceTimers((prev) => ({ ...prev, [utility]: timer }));
+  };
+
+  // 単一のutilityを保存する関数
+  const saveSingleUtility = async (utility: string, amount: string) => {
+    if (!selectedProperty || !selectedMonth) return;
+
+    setSaveStatus((prev) => ({ ...prev, [utility]: "saving" }));
+
+    try {
+      if (amount && amount.trim() !== "") {
+        await api.saveUtilityActual({
+          property_id: selectedProperty.property_id,
+          month_start: `${selectedMonth}-01`,
+          utility,
+          amount: parseFloat(amount),
+        });
+        setSaveStatus((prev) => ({ ...prev, [utility]: "saved" }));
+      }
+    } catch (error) {
+      console.error(`Error saving ${utility}:`, error);
+      setSaveStatus((prev) => ({ ...prev, [utility]: "error" }));
+    }
   };
 
   const handleCalculate = async () => {
@@ -218,6 +269,13 @@ export default function Calculate() {
       month: "long",
     });
   };
+
+  // 保存状態表示用のアイコンコンポーネント
+  const Spinner = () => (
+    <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+  );
+  const CheckIcon = () => <div className="text-green-500">✓</div>;
+  const ErrorIcon = () => <div className="text-red-500">✗</div>;
 
   // Group bill lines by user
   const groupedBillLines = billLines.reduce((acc, line) => {
@@ -325,35 +383,45 @@ export default function Calculate() {
                     {utility}
                   </td>
                   <td className="px-4 py-3">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="999999"
-                      value={utilityAmounts[utility] || ""}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Real-time validation feedback
-                        if (value && !validateUtilityAmount(value)) {
-                          e.target.setCustomValidity(
-                            "Please enter a value between 0 and 999,999"
-                          );
-                        } else {
-                          e.target.setCustomValidity("");
-                        }
-                        setUtilityAmounts((prev) => ({
-                          ...prev,
-                          [utility]: value,
-                        }));
-                      }}
-                      placeholder="Enter amount"
-                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                        utilityAmounts[utility] &&
-                        !validateUtilityAmount(utilityAmounts[utility])
-                          ? "border-red-300 bg-red-50"
-                          : "border-gray-300"
-                      }`}
-                    />
+                    <div className="flex items-center">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="999999"
+                        value={utilityAmounts[utility] || ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Real-time validation feedback
+                          if (value && !validateUtilityAmount(value)) {
+                            e.target.setCustomValidity(
+                              "Please enter a value between 0 and 999,999"
+                            );
+                          } else {
+                            e.target.setCustomValidity("");
+                          }
+                          setUtilityAmounts((prev) => ({
+                            ...prev,
+                            [utility]: value,
+                          }));
+
+                          // デバウンス付き保存
+                          debouncedSaveUtility(utility, value);
+                        }}
+                        placeholder="Enter amount"
+                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          utilityAmounts[utility] &&
+                          !validateUtilityAmount(utilityAmounts[utility])
+                            ? "border-red-300 bg-red-50"
+                            : "border-gray-300"
+                        }`}
+                      />
+                      <div className="ml-2">
+                        {saveStatus[utility] === "saving" && <Spinner />}
+                        {saveStatus[utility] === "saved" && <CheckIcon />}
+                        {saveStatus[utility] === "error" && <ErrorIcon />}
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ))}
