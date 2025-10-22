@@ -1,0 +1,187 @@
+"use client";
+
+import "../globals.css";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BarChart3, FileText, DollarSign, CreditCard } from "lucide-react";
+import { PropertyProvider, useProperty } from "@/contexts/PropertyContext";
+import { UserProfile } from "@/components/UserProfile";
+
+// ナビゲーション項目
+const navigationItems = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: BarChart3,
+    href: "/tenant/dashboard",
+  },
+  {
+    id: "history",
+    label: "History",
+    icon: FileText,
+    href: "/tenant/history",
+  },
+  {
+    id: "running-balance",
+    label: "Running Balance",
+    icon: DollarSign,
+    href: "/tenant/running-balance",
+  },
+  {
+    id: "payment",
+    label: "Payment",
+    icon: CreditCard,
+    href: "/tenant/payment",
+  },
+];
+
+// プロパティ選択コンポーネント
+function PropertySelector() {
+  const { selectedProperty, userProperties, isLoading, setSelectedProperty } =
+    useProperty();
+
+  const handlePropertyChange = (propertyId: string) => {
+    const property = userProperties.find((p) => p.property_id == propertyId);
+    setSelectedProperty(property || null);
+  };
+
+  return (
+    <div className="mt-4">
+      {isLoading ? (
+        <div className="text-sm text-gray-500">Loading properties...</div>
+      ) : userProperties.length > 0 ? (
+        <div className="relative">
+          <select
+            value={selectedProperty?.property_id || ""}
+            onChange={(e) => handlePropertyChange(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+          >
+            {userProperties.map((property) => (
+              <option key={property.property_id} value={property.property_id}>
+                {property.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div className="text-sm text-gray-500">No properties found</div>
+      )}
+    </div>
+  );
+}
+
+// レイアウトコンテンツコンポーネント
+function LayoutContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  return (
+    <div className="h-screen flex bg-gray-50">
+      {/* ナビゲーションバー（左側15%） */}
+      <div className="w-[15%] h-screen bg-white shadow-lg flex flex-col border-r border-gray-200">
+        {/* ロゴ・アプリ名 */}
+        <div className="p-6">
+          <div className="flex items-center" style={{ gap: "8px" }}>
+            <Image
+              src="/app_logo.png"
+              alt="RentCalc Logo"
+              width={32}
+              height={32}
+              className="w-8 h-8"
+            />
+            <h1 className="text-xl font-bold text-gray-900">RentCalc</h1>
+          </div>
+
+          {/* プロパティ選択ドロップダウン */}
+          <PropertySelector />
+        </div>
+
+        {/* ナビゲーション項目 */}
+        <nav
+          className="flex-1 px-4 pb-4 overflow-hidden"
+          style={{ paddingTop: "32px" }}
+        >
+          <div className="flex flex-col h-full" style={{ gap: "12px" }}>
+            {navigationItems.map((item) => {
+              const IconComponent = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={`w-full flex items-center space-x-8 px-12 py-8 text-left transition-colors border-0 no-underline ${
+                    isActive
+                      ? "text-blue-700 font-semibold"
+                      : "text-gray-600 hover:text-blue-700"
+                  }`}
+                  style={{
+                    backgroundColor: "white",
+                    transition:
+                      "background-color 0.2s ease, border-radius 0.2s ease",
+                    borderRadius: "8px",
+                    color: isActive ? "#1d4ed8" : "#6b7280",
+                    padding: "8px 16px",
+                    margin: "2px 0",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#dbeafe";
+                    e.currentTarget.style.color = "#1d4ed8";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "white";
+                    e.currentTarget.style.color = isActive
+                      ? "#1d4ed8"
+                      : "#6b7280";
+                  }}
+                >
+                  <IconComponent
+                    className="h-10 w-10 !h-10 !w-10"
+                    style={{ height: "40px", width: "40px" }}
+                  />
+                  <span
+                    className="text-2xl !text-2xl"
+                    style={{ fontSize: "24px" }}
+                  >
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
+
+      {/* コンテンツエリア（右側85%） */}
+      <div className="flex-1 flex flex-col">
+        {/* ヘッダー（上部12%） */}
+        <header
+          className="bg-white shadow-sm border-b border-gray-200 px-8 flex items-center"
+          style={{ height: "12%", paddingLeft: "30px" }}
+        >
+          <div className="flex items-center space-x-4">
+            <h1 className="text-2xl font-bold text-gray-900">Tenant Portal</h1>
+          </div>
+
+          {/* ユーザーアバター・名前（右上） */}
+          <UserProfile />
+        </header>
+
+        {/* メインコンテンツ（下部88%） */}
+        <main className="flex-1 overflow-y-auto bg-gray-50">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+// メインのレイアウトコンポーネント
+export default function TenantLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <PropertyProvider>
+      <LayoutContent>{children}</LayoutContent>
+    </PropertyProvider>
+  );
+}

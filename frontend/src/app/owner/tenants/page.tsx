@@ -75,7 +75,7 @@ export default function Tenants() {
         propertyId: selectedProperty.property_id,
       });
 
-      setMessage("Tenant added successfully!");
+      setMessage("Tenant found and added to property successfully!");
       setFormData({ name: "", email: "", personal_multiplier: 1 });
       setShowForm(false);
 
@@ -83,7 +83,9 @@ export default function Tenants() {
       loadTenants(selectedProperty.property_id);
     } catch (error) {
       console.error("Error adding tenant:", error);
-      setMessage("Error adding tenant");
+      setMessage(
+        "Error: Tenant not found or could not be added. Please check the name and email address."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -181,9 +183,11 @@ export default function Tenants() {
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-96">
-            <h2 className="text-xl font-bold mb-4">
-              Create New Tenant / Add Existing Tenant
-            </h2>
+            <h2 className="text-xl font-bold mb-4">Add Existing Tenant</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Search for an existing tenant by name and email address. If found,
+              they will be added to this property.
+            </p>
 
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
@@ -245,7 +249,7 @@ export default function Tenants() {
                   disabled={isSubmitting}
                   className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
                 >
-                  {isSubmitting ? "Saving..." : "Save"}
+                  {isSubmitting ? "Searching..." : "Search & Add Tenant"}
                 </button>
                 <button
                   type="button"

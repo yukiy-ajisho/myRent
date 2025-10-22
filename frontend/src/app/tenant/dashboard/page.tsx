@@ -177,102 +177,77 @@ export default function TenantDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Tenant Dashboard
-              </h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Manage your properties and view your account information
-              </p>
-            </div>
-            <button
-              onClick={handleSignOut}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
+    <div className="p-6">
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          Your Properties
+        </h2>
+        <p className="text-gray-600">
+          You have access to {properties.length} propert
+          {properties.length === 1 ? "y" : "ies"}
+        </p>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Your Properties
-          </h2>
-          <p className="text-gray-600">
-            You have access to {properties.length} propert
-            {properties.length === 1 ? "y" : "ies"}
-          </p>
-        </div>
-
-        {/* Properties Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {properties.map((property) => (
-            <div
-              key={property.property_id}
-              className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {property.name}
-                </h3>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Active
-                </span>
-              </div>
-
-              {property.address && (
-                <p className="text-sm text-gray-600 mb-4">{property.address}</p>
-              )}
-
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => {
-                    // TODO: Navigate to property details
-                    console.log("Navigate to property:", property.property_id);
-                  }}
-                  className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                >
-                  View Details
-                </button>
-                <button
-                  onClick={() => {
-                    // TODO: Navigate to payment history
-                    console.log(
-                      "Navigate to payments for property:",
-                      property.property_id
-                    );
-                  }}
-                  className="flex-1 px-3 py-2 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700"
-                >
-                  Payments
-                </button>
-              </div>
+      {/* Properties Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {properties.map((property) => (
+          <div
+            key={property.property_id}
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {property.name}
+              </h3>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Active
+              </span>
             </div>
-          ))}
-        </div>
 
-        {/* Additional Information */}
-        <div className="mt-12 bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Account Information
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Role</p>
-              <p className="text-sm text-gray-900">Tenant</p>
+            {property.address && (
+              <p className="text-sm text-gray-600 mb-4">{property.address}</p>
+            )}
+
+            <div className="flex space-x-2">
+              <button
+                onClick={() => {
+                  // TODO: Navigate to property details
+                  console.log("Navigate to property:", property.property_id);
+                }}
+                className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+              >
+                View Details
+              </button>
+              <button
+                onClick={() => {
+                  // TODO: Navigate to payment history
+                  console.log(
+                    "Navigate to payments for property:",
+                    property.property_id
+                  );
+                }}
+                className="flex-1 px-3 py-2 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700"
+              >
+                Payments
+              </button>
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Properties</p>
-              <p className="text-sm text-gray-900">{properties.length}</p>
-            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Additional Information */}
+      <div className="mt-12 bg-white rounded-lg shadow-md p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Account Information
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-500">Role</p>
+            <p className="text-sm text-gray-900">Tenant</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-500">Properties</p>
+            <p className="text-sm text-gray-900">{properties.length}</p>
           </div>
         </div>
       </div>
