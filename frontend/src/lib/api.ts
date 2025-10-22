@@ -279,4 +279,16 @@ export const api = {
   getTenantPayments: () => {
     return apiRequest("/tenant-payments");
   },
+
+  // Create tenant payment
+  createTenantPayment: (data: {
+    property_id: string;
+    amount: number;
+    note?: string;
+  }) => {
+    return apiRequest("/create-tenant-payment", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };

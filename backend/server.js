@@ -2557,8 +2557,11 @@ app.get("/tenant-payments", async (req, res) => {
 
     // アクティブなプロパティのみをフィルタリング
     const activeProperties = userProperties
-      .map((up) => up.property)
-      .filter((property) => property && property.active);
+      .filter((up) => up.property && up.property.active)
+      .map((up) => ({
+        property_id: up.property.property_id,
+        property: up.property,
+      }));
 
     // 3. テナントの支払い履歴取得
     const { data: payments, error: paymentsError } = await supabase
@@ -2617,6 +2620,119 @@ app.get("/tenant-payments", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch tenant payments",
+    });
+  }
+});
+
+// POST /create-tenant-payment - テナント用支払い作成
+app.post("/create-tenant-payment", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { property_id, amount, note } = req.body;
+
+    console.log(`[SECURITY] User ${userId} creating tenant payment`);
+    console.log(`[SECURITY] Payment data:`, { property_id, amount, note });
+
+    // 1. 入力値の検証
+    if (!property_id || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: "Property ID and amount are required",
+      });
+    }
+
+    if (typeof amount !== "number" || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Amount must be a positive number",
+      });
+    }
+
+    // 2. ユーザータイプ確認
+    const { data: user, error: userError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (user.user_type !== "tenant") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not a tenant`);
+      return res.status(403).json({
+        success: false,
+        error: "Tenant access required",
+      });
+    }
+
+    // 3. プロパティアクセス権確認
+    const { data: userProperty, error: propertyError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property_id,
+        property:property_id (
+          property_id,
+          name,
+          active
+        )
+      `
+      )
+      .eq("user_id", userId)
+      .eq("property_id", property_id)
+      .single();
+
+    if (propertyError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId}: no access to property ${property_id}`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "No access to this property",
+      });
+    }
+
+    if (!userProperty.property.active) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId}: property ${property_id} is inactive`
+      );
+      return res.status(403).json({
+        success: false,
+        error: "Property is not active",
+      });
+    }
+
+    // 4. 支払いレコード作成
+    const { data: payment, error: paymentError } = await supabase
+      .from("payment")
+      .insert({
+        user_id: userId,
+        property_id: property_id,
+        amount: amount,
+        note: note || null,
+        paid_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (paymentError) {
+      throw paymentError;
+    }
+
+    console.log(`[SECURITY] Payment created successfully:`, payment);
+
+    res.json({
+      success: true,
+      payment: payment,
+      message: "Payment created successfully",
+    });
+  } catch (error) {
+    console.error("[SECURITY] Create tenant payment error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to create payment",
     });
   }
 });
