@@ -291,4 +291,9 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Get tenant running balance
+  getTenantRunningBalance: () => {
+    return apiRequest("/tenant-running-balance");
+  },
 };

@@ -2737,6 +2737,112 @@ app.post("/create-tenant-payment", async (req, res) => {
   }
 });
 
+// GET /tenant-running-balance - テナント用残高履歴取得
+app.get("/tenant-running-balance", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting tenant running balance`);
+
+    // 1. ユーザータイプ確認
+    const { data: user, error: userError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (user.user_type !== "tenant") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not a tenant`);
+      return res.status(403).json({
+        success: false,
+        error: "Tenant access required",
+      });
+    }
+
+    // 2. テナントの所属プロパティ取得（フィルター用）
+    const { data: userProperties, error: propertiesError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        property_id,
+        property:property_id (
+          property_id,
+          name,
+          active,
+          address
+        )
+      `
+      )
+      .eq("user_id", userId);
+
+    if (propertiesError) {
+      throw propertiesError;
+    }
+
+    // アクティブなプロパティのみをフィルタリング
+    const activeProperties = userProperties
+      .filter((up) => up.property && up.property.active)
+      .map((up) => ({
+        property_id: up.property.property_id,
+        property: up.property,
+      }));
+
+    // 3. ledgerテーブルからテナントの全レコード取得
+    const { data: ledgerRecords, error: ledgerError } = await supabase
+      .from("ledger")
+      .select(
+        `
+        ledger_id,
+        user_id,
+        property_id,
+        amount,
+        posted_at,
+        source_type,
+        source_id,
+        property:property_id (
+          name
+        )
+      `
+      )
+      .eq("user_id", userId)
+      .order("posted_at", { ascending: true });
+
+    if (ledgerError) {
+      throw ledgerError;
+    }
+
+    // 4. 残高計算
+    let runningBalance = 0;
+    const recordsWithBalance = ledgerRecords.map((record) => {
+      runningBalance += record.amount;
+      return {
+        ...record,
+        running_balance: runningBalance,
+      };
+    });
+
+    console.log(
+      `[SECURITY] Found ${recordsWithBalance.length} ledger records for tenant ${userId}`
+    );
+
+    res.json({
+      success: true,
+      ledgerRecords: recordsWithBalance || [],
+      userProperties: activeProperties || [],
+    });
+  } catch (error) {
+    console.error("[SECURITY] Tenant running balance error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch running balance",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
