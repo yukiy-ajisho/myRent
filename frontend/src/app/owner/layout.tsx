@@ -26,30 +26,12 @@ const navigationItems = [
   },
   { id: "tenants", label: "Tenants", icon: Users, href: "/owner/tenants" },
   {
-    id: "division-methods",
-    label: "Division Methods",
-    icon: Settings,
-    href: "/owner/division-methods",
-  },
-  {
-    id: "stay-manager",
-    label: "Stay Manager",
-    icon: Home,
-    href: "/owner/stay-manager",
-  },
-  {
-    id: "rent-manager",
-    label: "Rent Manager",
-    icon: DollarSign,
-    href: "/owner/rent-manager",
-  },
-  { id: "history", label: "History", icon: FileText, href: "/owner/history" },
-  {
     id: "calculate",
     label: "Calculate",
     icon: TrendingUp,
     href: "/owner/calculate",
   },
+  { id: "history", label: "History", icon: FileText, href: "/owner/history" },
   { id: "payment", label: "Payment", icon: DollarSign, href: "/owner/payment" },
   {
     id: "properties",
