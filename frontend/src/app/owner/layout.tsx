@@ -32,7 +32,6 @@ const navigationItems = [
     href: "/owner/calculate",
   },
   { id: "history", label: "History", icon: FileText, href: "/owner/history" },
-  { id: "payment", label: "Payment", icon: DollarSign, href: "/owner/payment" },
   {
     id: "properties",
     label: "Properties",
