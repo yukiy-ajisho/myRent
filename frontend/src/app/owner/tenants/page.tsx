@@ -14,6 +14,18 @@ interface Tenant {
   property_name: string;
 }
 
+interface GroupedTenant {
+  user_id: string;
+  name: string;
+  email: string;
+  user_type: string;
+  personal_multiplier: number;
+  properties: {
+    property_id: string;
+    property_name: string;
+  }[];
+}
+
 export default function Tenants() {
   const { userProperties } = useProperty();
   const [allTenants, setAllTenants] = useState<Tenant[]>([]);
@@ -74,12 +86,36 @@ export default function Tenants() {
     }
   };
 
+  // テナントをグループ化する関数
+  const groupTenantsByUser = (tenants: Tenant[]): GroupedTenant[] => {
+    const grouped = tenants.reduce((acc, tenant) => {
+      const userId = tenant.user_id;
+      if (!acc[userId]) {
+        acc[userId] = {
+          user_id: tenant.user_id,
+          name: tenant.name,
+          email: tenant.email,
+          user_type: tenant.user_type,
+          personal_multiplier: tenant.personal_multiplier,
+          properties: [],
+        };
+      }
+      acc[userId].properties.push({
+        property_id: tenant.property_id,
+        property_name: tenant.property_name,
+      });
+      return acc;
+    }, {} as Record<string, GroupedTenant>);
+
+    return Object.values(grouped);
+  };
+
   // フィルタリングされたテナントデータ
   const filteredTenants = selectedProperty
     ? allTenants.filter(
         (tenant) => tenant.property_id === selectedProperty.property_id
       )
-    : allTenants;
+    : groupTenantsByUser(allTenants);
 
   // フォーム送信処理
   const handleSubmit = async (e: React.FormEvent) => {
@@ -195,7 +231,7 @@ export default function Tenants() {
             <div className="grid gap-4">
               {filteredTenants.map((tenant) => (
                 <div
-                  key={`${tenant.user_id}-${tenant.property_id}`}
+                  key={tenant.user_id}
                   className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow"
                 >
                   <div className="flex items-center justify-between">
@@ -204,16 +240,29 @@ export default function Tenants() {
                         {tenant.name}
                       </h3>
                       <p className="text-gray-600 mt-1">{tenant.email}</p>
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex gap-2 flex-wrap">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           {tenant.user_type}
                         </span>
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                           Multiplier: {tenant.personal_multiplier}
                         </span>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                          {tenant.property_name}
-                        </span>
+                        {selectedProperty ? (
+                          // 特定プロパティ選択時は従来通り
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            {tenant.property_name}
+                          </span>
+                        ) : (
+                          // All Properties選択時は複数プロパティを横に並べる
+                          tenant.properties.map((property) => (
+                            <span
+                              key={property.property_id}
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
+                            >
+                              {property.property_name}
+                            </span>
+                          ))
+                        )}
                       </div>
                     </div>
                   </div>
