@@ -60,7 +60,12 @@ export default function Properties() {
   const [calculateModalOpen, setCalculateModalOpen] = useState(false);
 
   // Bill runs管理
-  const [billRuns, setBillRuns] = useState<Record<string, { month_start: string; bill_run_id: number; status: string }[]>>({});
+  const [billRuns, setBillRuns] = useState<
+    Record<
+      string,
+      { month_start: string; bill_run_id: number; status: string }[]
+    >
+  >({});
 
   // プロパティ作成フォーム関連の状態
   const [showForm, setShowForm] = useState(false);
@@ -93,41 +98,58 @@ export default function Properties() {
   const loadBillRuns = useCallback(async (propertyId: string) => {
     try {
       const data = await api.getBillRuns(propertyId);
+      // CalculateModalと同じように降順でソート
+      const sortedBillRuns = (data.billRuns || []).sort((a: { month_start: string }, b: { month_start: string }) => 
+        new Date(b.month_start).getTime() - new Date(a.month_start).getTime()
+      );
       setBillRuns((prev) => ({
         ...prev,
-        [propertyId]: data.billRuns || [],
+        [propertyId]: sortedBillRuns,
       }));
     } catch (error) {
-      console.error(`Error loading bill runs for property ${propertyId}:`, error);
+      console.error(
+        `Error loading bill runs for property ${propertyId}:`,
+        error
+      );
     }
   }, []);
 
   // 次の月を計算する関数（CalculateModalと同じロジック）
-  const getNextMonthForProperty = useCallback((propertyId: string) => {
-    const propertyBillRuns = billRuns[propertyId] || [];
-    
-    if (propertyBillRuns.length === 0) {
+  const getNextMonthForProperty = useCallback(
+    (propertyId: string) => {
+      const propertyBillRuns = billRuns[propertyId] || [];
+
+      if (propertyBillRuns.length > 0) {
+        // 最新のbill_runの月を取得（既に降順でソート済みと仮定）
+        const latestMonth = propertyBillRuns[0].month_start;
+        if (latestMonth) {
+          return getNextMonth(latestMonth);
+        }
+      }
+      
       // bill_runレコードが存在しない場合、現在の月を返す
       const now = new Date();
-      const currentMonth = now.toISOString().slice(0, 7); // YYYY-MM format
-      return currentMonth;
-    }
-
-    // 最新のbill_runの月を取得
-    const latestBillRun = propertyBillRuns.reduce((latest, current) => {
-      return new Date(current.month_start) > new Date(latest.month_start) ? current : latest;
-    });
-
-    // 次の月を計算
-    return getNextMonth(latestBillRun.month_start);
-  }, [billRuns, getNextMonth]);
+      return now.toISOString().slice(0, 7); // YYYY-MM format
+    },
+    [billRuns, getNextMonth]
+  );
 
   // 月を表示用にフォーマットする関数
   const formatMonthDisplay = useCallback((monthString: string) => {
     const [year, month] = monthString.split("-");
     const monthNames = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
     ];
     const monthIndex = parseInt(month) - 1;
     return `${monthNames[monthIndex]} ${year}`;
@@ -429,7 +451,9 @@ export default function Properties() {
                               Calculate
                             </button>
                             <span className="text-xs text-gray-600">
-                              {formatMonthDisplay(getNextMonthForProperty(property.property_id))}
+                              {formatMonthDisplay(
+                                getNextMonthForProperty(property.property_id)
+                              )}
                             </span>
                           </div>
                         </div>
