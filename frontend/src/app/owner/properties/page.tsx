@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import TenantStayModal from "@/components/TenantStayModal";
 
 interface Property {
   property_id: string;
@@ -42,6 +43,10 @@ export default function Properties() {
   const [saveStatus, setSaveStatus] = useState<
     Record<string, "saving" | "saved" | "error">
   >({});
+
+  // Stay管理モーダル関連
+  const [stayModalOpen, setStayModalOpen] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
 
   // プロパティ作成フォーム関連の状態
   const [showForm, setShowForm] = useState(false);
@@ -247,6 +252,16 @@ export default function Properties() {
     }
   };
 
+  const handleStayClick = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setStayModalOpen(true);
+  };
+
+  const handleStayModalClose = () => {
+    setStayModalOpen(false);
+    setSelectedTenant(null);
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -362,6 +377,12 @@ export default function Properties() {
                                         tenant.user_id
                                       )}
                                     </div>
+                                    <button
+                                      onClick={() => handleStayClick(tenant)}
+                                      className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                                    >
+                                      Stay
+                                    </button>
                                   </div>
                                 </div>
                               )
@@ -457,6 +478,31 @@ export default function Properties() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Stay管理モーダル */}
+      {stayModalOpen && selectedTenant && (
+        <TenantStayModal
+          property={{
+            property_id:
+              properties.find((p) =>
+                rentData[p.property_id]?.tenants?.some(
+                  (t) => t.user_id === selectedTenant.user_id
+                )
+              )?.property_id || "",
+            name:
+              properties.find((p) =>
+                rentData[p.property_id]?.tenants?.some(
+                  (t) => t.user_id === selectedTenant.user_id
+                )
+              )?.name || "",
+            timezone: "UTC",
+            active: true,
+          }}
+          tenant={selectedTenant}
+          isOpen={stayModalOpen}
+          onClose={handleStayModalClose}
+        />
       )}
     </div>
   );
