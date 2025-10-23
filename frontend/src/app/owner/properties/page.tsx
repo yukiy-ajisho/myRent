@@ -689,7 +689,11 @@ export default function Properties() {
       {/* 成功モーダル */}
       <CalculationSuccessModal
         isOpen={successModalOpen}
-        onClose={() => setSuccessModalOpen(false)}
+        onClose={() => {
+          setSuccessModalOpen(false);
+          // データを再読み込みして再レンダリング
+          loadProperties();
+        }}
       />
     </div>
   );
