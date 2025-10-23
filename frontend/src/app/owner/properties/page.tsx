@@ -99,8 +99,9 @@ export default function Properties() {
     try {
       const data = await api.getBillRuns(propertyId);
       // CalculateModalと同じように降順でソート
-      const sortedBillRuns = (data.billRuns || []).sort((a: { month_start: string }, b: { month_start: string }) => 
-        new Date(b.month_start).getTime() - new Date(a.month_start).getTime()
+      const sortedBillRuns = (data.billRuns || []).sort(
+        (a: { month_start: string }, b: { month_start: string }) =>
+          new Date(b.month_start).getTime() - new Date(a.month_start).getTime()
       );
       setBillRuns((prev) => ({
         ...prev,
@@ -126,7 +127,7 @@ export default function Properties() {
           return getNextMonth(latestMonth);
         }
       }
-      
+
       // bill_runレコードが存在しない場合、現在の月を返す
       const now = new Date();
       return now.toISOString().slice(0, 7); // YYYY-MM format
@@ -444,17 +445,17 @@ export default function Properties() {
                             Division Methods
                           </button>
                           <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">
+                              {formatMonthDisplay(
+                                getNextMonthForProperty(property.property_id)
+                              )}
+                            </span>
                             <button
                               onClick={() => handleCalculateClick(property)}
                               className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
                             >
                               Calculate
                             </button>
-                            <span className="text-xs text-gray-600">
-                              {formatMonthDisplay(
-                                getNextMonthForProperty(property.property_id)
-                              )}
-                            </span>
                           </div>
                         </div>
                       </div>

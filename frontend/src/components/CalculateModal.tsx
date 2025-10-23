@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import PreviewModal from "./PreviewModal";
+import CalculationSuccessModal from "./CalculationSuccessModal";
 
 interface Property {
   property_id: string;
@@ -81,6 +82,7 @@ export default function CalculateModal({
     {}
   );
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [previewData, setPreviewData] = useState<{
     previewData: {
       billLines: unknown[];
@@ -360,9 +362,15 @@ export default function CalculateModal({
         `Calculation confirmed! Created ${result.lines_created} bill lines and ${result.ledger_records_created} ledger records.`
       );
 
-      // Close preview modal
+      // Close both preview modal and calculate modal
       setPreviewModalOpen(false);
       setPreviewData(null);
+      
+      // Close the main calculate modal
+      onClose();
+
+      // Show success modal
+      setSuccessModalOpen(true);
 
       // Reload bill lines to show new results
       await loadBillLines(property.property_id);
@@ -730,6 +738,12 @@ export default function CalculateModal({
         previewData={previewData}
         property={property}
         month={selectedMonth}
+      />
+
+      {/* Success Modal */}
+      <CalculationSuccessModal
+        isOpen={successModalOpen}
+        onClose={() => setSuccessModalOpen(false)}
       />
     </div>
   );
