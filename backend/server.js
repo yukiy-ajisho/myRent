@@ -1335,7 +1335,180 @@ app.post("/utility-actual", async (req, res) => {
   }
 });
 
-// POST /run-bill - 請求計算実行
+// POST /calculate-bills-preview - 請求計算プレビュー（DB書き込みなし）
+app.post("/calculate-bills-preview", async (req, res) => {
+  try {
+    const { property_id, month_start, stay_periods } = req.body;
+    const userId = req.user.id;
+
+    if (!property_id || !month_start) {
+      return res.status(400).json({ error: "Invalid request data" });
+    }
+
+    console.log(
+      `[SECURITY] User ${userId} requesting bill calculation preview for property ${property_id}`
+    );
+
+    // 1. オーナー権限の確認
+    const { data: ownerCheck, error: ownerError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (ownerError || !ownerCheck || ownerCheck.user_type !== "owner") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not an owner`);
+      return res
+        .status(403)
+        .json({ error: "Owner access required for bill calculation" });
+    }
+
+    // 2. プロパティアクセス権限の確認
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", property_id)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${property_id}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 3. 重複計算の防止（同じ月の計算が既に存在するかチェック）
+    const { data: existingBillRun, error: billRunError } = await supabase
+      .from("bill_run")
+      .select("bill_run_id, status")
+      .eq("property_id", property_id)
+      .eq("month_start", month_start)
+      .single();
+
+    if (billRunError && billRunError.code !== "PGRST116") {
+      throw billRunError;
+    }
+
+    if (existingBillRun && existingBillRun.status === "closed") {
+      console.log(
+        `[SECURITY] Calculation already completed for property ${property_id}, month ${month_start}`
+      );
+      return res
+        .status(409)
+        .json({ error: "Bill calculation already completed for this month" });
+    }
+
+    console.log(
+      `[SECURITY] Starting bill calculation preview for property ${property_id}, month ${month_start}`
+    );
+
+    // Calculate bills (preview mode - no DB writes)
+    const result = await calculateBills(
+      property_id,
+      month_start,
+      stay_periods,
+      true
+    );
+
+    console.log(
+      `[SECURITY] Bill calculation preview completed for property ${property_id}: ${result.lines_created} lines`
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error("Calculate bills preview error:", error);
+    res.status(500).json({ error: "Failed to calculate bills preview" });
+  }
+});
+
+// POST /confirm-bills-calculation - 請求計算結果の確認とDB書き込み
+app.post("/confirm-bills-calculation", async (req, res) => {
+  try {
+    const { property_id, month_start, stay_periods, previewData } = req.body;
+    const userId = req.user.id;
+
+    if (!property_id || !month_start || !previewData) {
+      return res.status(400).json({ error: "Invalid request data" });
+    }
+
+    console.log(
+      `[SECURITY] User ${userId} confirming bill calculation for property ${property_id}`
+    );
+
+    // 1. オーナー権限の確認
+    const { data: ownerCheck, error: ownerError } = await supabase
+      .from("app_user")
+      .select("user_type")
+      .eq("user_id", userId)
+      .single();
+
+    if (ownerError || !ownerCheck || ownerCheck.user_type !== "owner") {
+      console.log(`[SECURITY] Access denied for user ${userId}: not an owner`);
+      return res
+        .status(403)
+        .json({ error: "Owner access required for bill calculation" });
+    }
+
+    // 2. プロパティアクセス権限の確認
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", property_id)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${property_id}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 3. 重複計算の防止（同じ月の計算が既に存在するかチェック）
+    const { data: existingBillRun, error: billRunError } = await supabase
+      .from("bill_run")
+      .select("bill_run_id, status")
+      .eq("property_id", property_id)
+      .eq("month_start", month_start)
+      .single();
+
+    if (billRunError && billRunError.code !== "PGRST116") {
+      throw billRunError;
+    }
+
+    if (existingBillRun && existingBillRun.status === "closed") {
+      console.log(
+        `[SECURITY] Calculation already completed for property ${property_id}, month ${month_start}`
+      );
+      return res
+        .status(409)
+        .json({ error: "Bill calculation already completed for this month" });
+    }
+
+    console.log(
+      `[SECURITY] Confirming bill calculation for property ${property_id}, month ${month_start}`
+    );
+
+    // Write preview data to database
+    const result = await writePreviewDataToDatabase(
+      property_id,
+      month_start,
+      previewData
+    );
+
+    console.log(
+      `[SECURITY] Bill calculation confirmed for property ${property_id}: ${result.lines_created} lines, ${result.ledger_records_created} ledger records`
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error("Confirm bills calculation error:", error);
+    res.status(500).json({ error: "Failed to confirm bills calculation" });
+  }
+});
+
+// POST /run-bill - 請求計算実行（既存のエンドポイントを保持）
 app.post("/run-bill", async (req, res) => {
   try {
     const { property_id, month_start, stay_periods } = req.body;
@@ -1695,7 +1868,8 @@ app.get("/dump-all", async (req, res) => {
 async function calculateBills(
   property_id,
   month_start,
-  manualStayPeriods = {}
+  manualStayPeriods = {},
+  previewMode = false
 ) {
   console.log(`=== DEBUG: calculateBills ===`);
   console.log(`Property ID: ${property_id}`);
@@ -1713,38 +1887,55 @@ async function calculateBills(
 
   console.log(`Calculated Month End: ${monthEnd.toISOString().split("T")[0]}`);
 
-  // Get or create bill_run
-  let { data: billRun, error: billRunError } = await supabase
-    .from("bill_run")
-    .select("*")
-    .eq("property_id", property_id)
-    .eq("month_start", month_start)
-    .single();
+  // Get or create bill_run (skip creation in preview mode)
+  let billRun;
 
-  if (billRunError && billRunError.code !== "PGRST116") {
-    throw billRunError;
-  }
-
-  if (!billRun) {
-    const { data: newBillRun, error: createError } = await supabase
+  if (previewMode) {
+    // In preview mode, use a temporary bill_run object with a fake ID
+    billRun = {
+      bill_run_id: -1, // Temporary ID for preview
+      property_id: property_id,
+      month_start: month_start,
+      status: "open",
+    };
+  } else {
+    // Normal mode: get or create bill_run
+    let { data: existingBillRun, error: billRunError } = await supabase
       .from("bill_run")
-      .insert({
-        property_id,
-        month_start,
-        status: "open",
-      })
-      .select()
+      .select("*")
+      .eq("property_id", property_id)
+      .eq("month_start", month_start)
       .single();
 
-    if (createError) throw createError;
-    billRun = newBillRun;
+    if (billRunError && billRunError.code !== "PGRST116") {
+      throw billRunError;
+    }
+
+    if (!existingBillRun) {
+      const { data: newBillRun, error: createError } = await supabase
+        .from("bill_run")
+        .insert({
+          property_id,
+          month_start,
+          status: "open",
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      billRun = newBillRun;
+    } else {
+      billRun = existingBillRun;
+    }
   }
 
-  // Delete existing bill_lines
-  await supabase
-    .from("bill_line")
-    .delete()
-    .eq("bill_run_id", billRun.bill_run_id);
+  // Delete existing bill_lines (skip in preview mode)
+  if (!previewMode) {
+    await supabase
+      .from("bill_line")
+      .delete()
+      .eq("bill_run_id", billRun.bill_run_id);
+  }
 
   // Get active tenant users for this property
   // First get users from user_property, then check if they are active based on stay_record
@@ -2086,8 +2277,8 @@ async function calculateBills(
   console.log("billLines.length:", billLines.length);
   console.log("billLines content:", billLines);
 
-  // Insert bill lines
-  if (billLines.length > 0) {
+  // Insert bill lines (skip in preview mode)
+  if (!previewMode && billLines.length > 0) {
     const { error: insertError } = await supabase
       .from("bill_line")
       .insert(billLines);
@@ -2158,8 +2349,8 @@ async function calculateBills(
     });
   }
 
-  // Insert ledger records
-  if (ledgerRecords.length > 0) {
+  // Insert ledger records (skip in preview mode)
+  if (!previewMode && ledgerRecords.length > 0) {
     const { error: ledgerInsertError } = await supabase
       .from("ledger")
       .insert(ledgerRecords);
@@ -2172,7 +2363,7 @@ async function calculateBills(
     console.log(`Created ${ledgerRecords.length} ledger records`);
   }
 
-  return {
+  const result = {
     bill_run_id: billRun.bill_run_id,
     lines_created: billLines.length,
     ledger_records_created: ledgerRecords.length,
@@ -2184,6 +2375,119 @@ async function calculateBills(
     user_days: userDays,
     headcount: headcount,
     total_person_days: totalPersonDays,
+  };
+
+  // Include preview data if in preview mode
+  if (previewMode) {
+    result.previewData = {
+      billLines: billLines,
+      ledgerRecords: ledgerRecords,
+    };
+  }
+
+  return result;
+}
+
+// Write preview data to database
+async function writePreviewDataToDatabase(
+  property_id,
+  month_start,
+  previewData
+) {
+  console.log(`=== DEBUG: writePreviewDataToDatabase ===`);
+  console.log(`Property ID: ${property_id}`);
+  console.log(`Month Start: ${month_start}`);
+  console.log(`Preview Data:`, previewData);
+
+  // Get or create bill_run
+  let { data: billRun, error: billRunError } = await supabase
+    .from("bill_run")
+    .select("*")
+    .eq("property_id", property_id)
+    .eq("month_start", month_start)
+    .single();
+
+  if (billRunError && billRunError.code !== "PGRST116") {
+    throw billRunError;
+  }
+
+  if (!billRun) {
+    const { data: newBillRun, error: createError } = await supabase
+      .from("bill_run")
+      .insert({
+        property_id,
+        month_start,
+        status: "open",
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+    billRun = newBillRun;
+  }
+
+  // Delete existing bill_lines
+  await supabase
+    .from("bill_line")
+    .delete()
+    .eq("bill_run_id", billRun.bill_run_id);
+
+  // Insert bill lines from preview data
+  if (previewData.billLines && previewData.billLines.length > 0) {
+    // Update bill_run_id in bill lines to use the actual bill_run_id
+    const billLinesWithCorrectId = previewData.billLines.map((line) => ({
+      ...line,
+      bill_run_id: billRun.bill_run_id,
+    }));
+
+    const { error: insertError } = await supabase
+      .from("bill_line")
+      .insert(billLinesWithCorrectId);
+
+    if (insertError) throw insertError;
+  }
+
+  // Insert ledger records from preview data
+  if (previewData.ledgerRecords && previewData.ledgerRecords.length > 0) {
+    // Update source_id in ledger records to use the actual bill_run_id
+    const ledgerRecordsWithCorrectId = previewData.ledgerRecords.map(
+      (record) => ({
+        ...record,
+        source_id: billRun.bill_run_id, // Update source_id to match actual bill_run_id
+      })
+    );
+
+    const { error: ledgerInsertError } = await supabase
+      .from("ledger")
+      .insert(ledgerRecordsWithCorrectId);
+
+    if (ledgerInsertError) {
+      console.error("Error inserting ledger records:", ledgerInsertError);
+      throw ledgerInsertError;
+    }
+  }
+
+  return {
+    bill_run_id: billRun.bill_run_id,
+    lines_created: previewData.billLines ? previewData.billLines.length : 0,
+    ledger_records_created: previewData.ledgerRecords
+      ? previewData.ledgerRecords.length
+      : 0,
+    totals: {
+      rent:
+        previewData.billLines
+          ?.filter((line) => line.utility === "rent")
+          .reduce((sum, line) => sum + line.amount, 0) || 0,
+      utilities:
+        previewData.billLines
+          ?.filter((line) => line.utility !== "rent")
+          .reduce((sum, line) => sum + line.amount, 0) || 0,
+      grand_total:
+        previewData.billLines?.reduce((sum, line) => sum + line.amount, 0) || 0,
+    },
+    user_days: {}, // Not available in preview data
+    headcount: 0, // Not available in preview data
+    total_person_days: 0, // Not available in preview data
   };
 }
 

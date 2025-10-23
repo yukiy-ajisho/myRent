@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import PreviewModal from "./PreviewModal";
 
 interface Property {
   property_id: string;
@@ -59,12 +60,14 @@ interface CalculateModalProps {
   property: Property;
   isOpen: boolean;
   onClose: () => void;
+  onCalculationComplete?: () => void;
 }
 
 export default function CalculateModal({
   property,
   isOpen,
   onClose,
+  onCalculationComplete,
 }: CalculateModalProps) {
   const [selectedMonth, setSelectedMonth] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -77,6 +80,23 @@ export default function CalculateModal({
   const [utilityAmounts, setUtilityAmounts] = useState<Record<string, string>>(
     {}
   );
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    previewData: {
+      billLines: unknown[];
+      ledgerRecords: unknown[];
+    };
+    lines_created: number;
+    ledger_records_created: number;
+    totals: {
+      rent: number;
+      utilities: number;
+      grand_total: number;
+    };
+    user_days: Record<string, number>;
+    headcount: number;
+    total_person_days: number;
+  } | null>(null);
   const [saveStatus, setSaveStatus] = useState<
     Record<string, "saving" | "saved" | "error">
   >({});
@@ -276,7 +296,7 @@ export default function CalculateModal({
       setMessage("");
       setCalculationResult(null); // Clear previous results
 
-      console.log("=== CALCULATION DEBUG ===");
+      console.log("=== CALCULATION PREVIEW DEBUG ===");
       console.log("Property ID:", property.property_id);
       console.log("Month:", selectedMonth);
 
@@ -292,21 +312,18 @@ export default function CalculateModal({
         }
       }
 
-      const result = await api.runBillCalculation({
-        propertyId: property.property_id,
-        monthStart: `${selectedMonth}-01`, // Convert YYYY-MM to YYYY-MM-DD
+      // Call preview API instead of direct calculation
+      const result = await api.calculateBillsPreview({
+        property_id: property.property_id,
+        month_start: `${selectedMonth}-01`, // Convert YYYY-MM to YYYY-MM-DD
       });
 
-      console.log("Calculation result:", result);
-      setCalculationResult(result);
-      setMessage(
-        `Calculation completed! Created ${result.lines_created} bill lines and ${result.ledger_records_created} ledger records.`
-      );
-
-      // Reload bill lines to show new results
-      await loadBillLines(property.property_id);
+      console.log("Preview result:", result);
+      setPreviewData(result);
+      setPreviewModalOpen(true);
+      setMessage("Calculation preview ready. Please review and confirm.");
     } catch (error) {
-      console.error("Error running calculation:", error);
+      console.error("Error running calculation preview:", error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       if (errorMessage.includes("Owner access required")) {
@@ -316,11 +333,57 @@ export default function CalculateModal({
       } else if (errorMessage.includes("already completed")) {
         setMessage("Error: Bill calculation already completed for this month");
       } else {
-        setMessage("Error running calculation");
+        setMessage("Error running calculation preview");
       }
     } finally {
       setIsCalculating(false);
     }
+  };
+
+  const handleConfirmCalculation = async () => {
+    if (!property || !selectedMonth || !previewData) {
+      return;
+    }
+
+    try {
+      setIsCalculating(true);
+
+      const result = await api.confirmBillsCalculation({
+        property_id: property.property_id,
+        month_start: `${selectedMonth}-01`,
+        previewData: previewData.previewData,
+      });
+
+      console.log("Confirmation result:", result);
+      setCalculationResult(result);
+      setMessage(
+        `Calculation confirmed! Created ${result.lines_created} bill lines and ${result.ledger_records_created} ledger records.`
+      );
+
+      // Close preview modal
+      setPreviewModalOpen(false);
+      setPreviewData(null);
+
+      // Reload bill lines to show new results
+      await loadBillLines(property.property_id);
+
+      // Call completion callback if provided
+      if (onCalculationComplete) {
+        onCalculationComplete();
+      }
+    } catch (error) {
+      console.error("Error confirming calculation:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      setMessage(`Error confirming calculation: ${errorMessage}`);
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  const handlePreviewModalClose = () => {
+    setPreviewModalOpen(false);
+    setPreviewData(null);
   };
 
   const formatCurrency = (amount: number) => {
@@ -658,6 +721,16 @@ export default function CalculateModal({
           )}
         </div>
       </div>
+
+      {/* Preview Modal */}
+      <PreviewModal
+        isOpen={previewModalOpen}
+        onClose={handlePreviewModalClose}
+        onConfirm={handleConfirmCalculation}
+        previewData={previewData}
+        property={property}
+        month={selectedMonth}
+      />
     </div>
   );
 }

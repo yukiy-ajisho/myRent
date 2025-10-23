@@ -45,7 +45,9 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     }
 
     const apiError = new Error(errorData.error || "API request failed");
-    (apiError as any).response = { data: errorData };
+    (apiError as Error & { response: { data: unknown } }).response = {
+      data: errorData,
+    };
     throw apiError;
   }
 
@@ -325,6 +327,34 @@ export const api = {
   // Get bill runs for a property
   getBillRuns: (propertyId: string) => {
     return apiRequest(`/bill-runs/${propertyId}`);
+  },
+
+  // Calculate bills preview (no DB writes)
+  calculateBillsPreview: (data: {
+    property_id: string;
+    month_start: string;
+    stay_periods?: Record<string, unknown>;
+  }) => {
+    return apiRequest("/calculate-bills-preview", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Confirm bills calculation (write to DB)
+  confirmBillsCalculation: (data: {
+    property_id: string;
+    month_start: string;
+    stay_periods?: Record<string, unknown>;
+    previewData: {
+      billLines: unknown[];
+      ledgerRecords: unknown[];
+    };
+  }) => {
+    return apiRequest("/confirm-bills-calculation", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   },
 
   // Get latest bill run month for a property
