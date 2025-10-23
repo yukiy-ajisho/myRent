@@ -325,11 +325,8 @@ export default function Tenants() {
                       </div>
                       <p className="text-gray-600 mt-1">{tenant.email}</p>
                       <div className="mt-2 flex gap-2 flex-wrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          {tenant.user_type}
-                        </span>
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          Multiplier: {tenant.personal_multiplier}
+                          Household Size: {tenant.personal_multiplier}
                         </span>
                         {selectedProperty ? (
                           // 特定プロパティ選択時は従来通り
