@@ -3202,6 +3202,57 @@ app.post("/owner-tenant", async (req, res) => {
   }
 });
 
+// GET /bill-runs/:propertyId - プロパティの全てのbill_runを取得
+app.get("/bill-runs/:propertyId", async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting bill runs for property ${propertyId}`
+    );
+
+    // アクセス権限チェック
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${propertyId}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // bill_runを全て取得
+    const { data: billRuns, error } = await supabase
+      .from("bill_run")
+      .select("*")
+      .eq("property_id", propertyId)
+      .order("month_start", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    console.log(
+      `[SECURITY] Bill runs fetched for property ${propertyId}: ${
+        billRuns?.length || 0
+      } records`
+    );
+
+    res.json({
+      billRuns: billRuns || [],
+    });
+  } catch (error) {
+    console.error("Bill runs error:", error);
+    res.status(500).json({ error: "Failed to fetch bill runs" });
+  }
+});
+
 // GET /latest-bill-run-month/:propertyId - 最新のbill_run月を取得
 app.get("/latest-bill-run-month/:propertyId", async (req, res) => {
   try {

@@ -322,6 +322,11 @@ export const api = {
     });
   },
 
+  // Get bill runs for a property
+  getBillRuns: (propertyId: string) => {
+    return apiRequest(`/bill-runs/${propertyId}`);
+  },
+
   // Get latest bill run month for a property
   getLatestBillRunMonth: (propertyId: string) => {
     return apiRequest(`/latest-bill-run-month/${propertyId}`);

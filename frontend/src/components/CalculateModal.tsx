@@ -38,6 +38,13 @@ interface BillLine {
   };
 }
 
+interface BillRun {
+  bill_run_id: number;
+  property_id: string;
+  month_start: string;
+  created_at: string;
+}
+
 interface UtilityActual {
   actual_id: string;
   property_id: string;
@@ -66,6 +73,7 @@ export default function CalculateModal({
   const [calculationResult, setCalculationResult] =
     useState<CalculationResult | null>(null);
   const [billLines, setBillLines] = useState<BillLine[]>([]);
+  const [billRuns, setBillRuns] = useState<BillRun[]>([]);
   const [utilityAmounts, setUtilityAmounts] = useState<Record<string, string>>(
     {}
   );
@@ -95,35 +103,35 @@ export default function CalculateModal({
     return result;
   }, []);
 
-  const loadLatestMonth = useCallback(
-    async (propertyId: string) => {
-      try {
-        const data = await api.getLatestBillRunMonth(propertyId);
-        if (data.latestMonth) {
-          // 次の月を計算
-          const nextMonth = getNextMonth(data.latestMonth);
-          setSelectedMonth(nextMonth);
-        } else {
-          // レコードがない場合は現在月
-          const now = new Date();
-          setSelectedMonth(now.toISOString().slice(0, 7));
-        }
-      } catch (error) {
-        console.error("Error loading latest month:", error);
-        // エラー時は現在月
-        const now = new Date();
-        setSelectedMonth(now.toISOString().slice(0, 7));
-      }
-    },
-    [getNextMonth]
-  );
+  const loadBillRuns = useCallback(async (propertyId: string) => {
+    try {
+      const data = await api.getBillRuns(propertyId);
+      setBillRuns(data.billRuns || []);
+    } catch (error) {
+      console.error("Error loading bill runs:", error);
+    }
+  }, []);
 
   // Initialize with next month after latest bill run
   useEffect(() => {
     if (property && isOpen) {
-      loadLatestMonth(property.property_id);
+      loadBillRuns(property.property_id);
     }
-  }, [property, isOpen, loadLatestMonth]);
+  }, [property, isOpen, loadBillRuns]);
+
+  // Initialize selectedMonth when billRuns are loaded
+  useEffect(() => {
+    if (billRuns.length > 0 && !selectedMonth) {
+      const latestMonth = billRuns[0].month_start; // 既に降順でソート済み
+      if (latestMonth) {
+        const nextMonth = getNextMonth(latestMonth);
+        setSelectedMonth(nextMonth);
+      } else {
+        const now = new Date();
+        setSelectedMonth(now.toISOString().slice(0, 7));
+      }
+    }
+  }, [billRuns, selectedMonth, getNextMonth]);
 
   const loadBillLines = useCallback(
     async (propertyId: string) => {
@@ -193,10 +201,8 @@ export default function CalculateModal({
 
   const validateMonth = (month: string): boolean => {
     if (!month) return false;
-    const selectedDate = new Date(month + "-01");
-    const now = new Date();
-    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    return selectedDate <= currentMonth; // 未来の月は選択不可
+    const monthStart = `${month}-01`;
+    return !billRuns.some((run) => run.month_start === monthStart);
   };
 
   // デバウンス付きの保存関数
@@ -242,9 +248,9 @@ export default function CalculateModal({
       return;
     }
 
-    // Validate month (prevent future month calculations)
+    // Validate month (prevent duplicate calculations)
     if (!validateMonth(selectedMonth)) {
-      setMessage("Cannot calculate bills for future months");
+      setMessage("This month has already been calculated");
       return;
     }
 
@@ -386,7 +392,9 @@ export default function CalculateModal({
                     const value = e.target.value;
                     // Real-time validation feedback
                     if (value && !validateMonth(value)) {
-                      e.target.setCustomValidity("Cannot select future months");
+                      e.target.setCustomValidity(
+                        "This month has already been calculated"
+                      );
                     } else {
                       e.target.setCustomValidity("");
                     }
@@ -398,11 +406,20 @@ export default function CalculateModal({
                       : "border-gray-300"
                   }`}
                 />
+                {selectedMonth && !validateMonth(selectedMonth) && (
+                  <p className="mt-1 text-sm text-red-600">
+                    This month has already been calculated
+                  </p>
+                )}
               </div>
               <div className="flex items-end">
                 <button
                   onClick={handleCalculate}
-                  disabled={isCalculating || !selectedMonth}
+                  disabled={
+                    isCalculating ||
+                    !selectedMonth ||
+                    !validateMonth(selectedMonth)
+                  }
                   className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
                 >
                   {isCalculating ? (
