@@ -164,9 +164,9 @@ export const api = {
     });
   },
 
-  // Get bill line data for a specific property
-  getBillLineData: (propertyId: string) => {
-    return apiRequest(`/bill-line/${propertyId}`);
+  // Get bill line data for a specific property or all properties
+  getBillLineData: (propertyId?: string) => {
+    return apiRequest(`/bill-line${propertyId ? `/${propertyId}` : ""}`);
   },
 
   // Get rent data for a specific property
@@ -174,13 +174,13 @@ export const api = {
     return apiRequest(`/rent-data/${propertyId}`);
   },
 
+  // Get all rent data for all properties
+  getAllRentData: () => {
+    return apiRequest("/rent-data");
+  },
+
   // Add tenant (new or existing)
-  addTenant: (data: {
-    name: string;
-    email: string;
-    personal_multiplier: number;
-    propertyId: string;
-  }) => {
+  addTenant: (data: { name: string; email: string; propertyId: number }) => {
     return apiRequest("/add-tenant", {
       method: "POST",
       body: JSON.stringify(data),
@@ -190,6 +190,11 @@ export const api = {
   // Get payments for a specific property
   getPayments: (propertyId: string) => {
     return apiRequest(`/payments/${propertyId}`);
+  },
+
+  // Get all payments for all properties
+  getAllPayments: () => {
+    return apiRequest("/payments");
   },
 
   // Accept payment (add to ledger)
@@ -255,6 +260,11 @@ export const api = {
   // Get dashboard data for a specific property
   getDashboardData: (propertyId: string) => {
     return apiRequest(`/dashboard/${propertyId}`);
+  },
+
+  // Get all dashboard data for all properties
+  getAllDashboardData: () => {
+    return apiRequest("/dashboard");
   },
 
   // Select user type

@@ -94,7 +94,20 @@ export default function RentManagerModal({
   };
 
   const handleRentChange = (userId: string, value: string) => {
-    const rent = parseFloat(value) || 0;
+    // 数値以外の文字を削除（小数点と数字のみ許可）
+    const numericValue = value.replace(/[^0-9.]/g, "");
+
+    // 複数の小数点を防ぐ
+    const parts = numericValue.split(".");
+    const cleanValue =
+      parts.length > 2
+        ? parts[0] + "." + parts.slice(1).join("")
+        : numericValue;
+
+    // 空文字列の場合は0に設定
+    const finalValue = cleanValue === "" ? "0" : cleanValue;
+
+    const rent = parseFloat(finalValue) || 0;
     setCurrentRents((prev) => ({
       ...prev,
       [userId]: rent,
@@ -195,13 +208,22 @@ export default function RentManagerModal({
                               $
                             </span>
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0"
+                              type="text"
                               value={currentRents[tenant.user_id] || 0}
                               onChange={(e) =>
                                 handleRentChange(tenant.user_id, e.target.value)
                               }
+                              onInput={(e) => {
+                                const target = e.target as HTMLInputElement;
+                                const value = target.value;
+                                // 先頭の0を削除（例: "0200" → "200"）
+                                const cleanValue =
+                                  value.replace(/^0+/, "") || "0";
+                                if (value !== cleanValue) {
+                                  target.value = cleanValue;
+                                  handleRentChange(tenant.user_id, cleanValue);
+                                }
+                              }}
                               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
                           </div>

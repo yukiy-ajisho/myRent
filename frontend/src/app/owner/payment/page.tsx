@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useProperty } from "@/contexts/PropertyContext";
+import { useProperty, Property } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
 
 interface Payment {
@@ -19,42 +19,35 @@ interface Payment {
 }
 
 export default function Payment() {
-  const { selectedProperty } = useProperty();
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const { userProperties } = useProperty();
+  const [allPayments, setAllPayments] = useState<Payment[]>([]);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  // 初期データ読み込み
   useEffect(() => {
-    if (selectedProperty) {
-      loadPayments(selectedProperty.property_id);
-    }
-  }, [selectedProperty]);
+    fetchAllPayments();
+  }, []);
 
-  const loadPayments = async (propertyId: string) => {
+  const fetchAllPayments = async () => {
     try {
       setIsLoading(true);
       setMessage("");
 
       console.log("=== PAYMENT DEBUG ===");
-      console.log("Property ID:", propertyId);
-      console.log("Starting API call...");
+      console.log("Fetching all payments...");
 
-      const data = await api.getPayments(propertyId);
+      const data = await api.getAllPayments();
       console.log("API Response received:", data);
 
       const payments = data.payments || [];
-      console.log("Payments from API:", payments);
+      console.log("All payments from API:", payments);
       console.log("Number of payments:", payments.length);
-      payments.forEach((payment, index) => {
-        console.log(`Payment ${index + 1}:`, {
-          id: payment.payment_id,
-          name: payment.app_user?.name,
-          amount: payment.amount,
-          isAccepted: payment.isAccepted,
-        });
-      });
 
-      setPayments(payments);
+      setAllPayments(payments);
     } catch (error) {
       console.error("Error loading payments:", error);
       setMessage("Error loading payments");
@@ -62,6 +55,41 @@ export default function Payment() {
       setIsLoading(false);
     }
   };
+
+  // プロパティ選択変更
+  const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const propertyId = e.target.value;
+    console.log("=== PROPERTY SELECTION DEBUG ===");
+    console.log("Selected propertyId:", propertyId);
+    console.log("userProperties:", userProperties);
+
+    if (propertyId === "") {
+      setSelectedProperty(null);
+    } else {
+      const property = userProperties.find(
+        (p) => p.property_id === parseInt(propertyId)
+      );
+      console.log("Found property:", property);
+      setSelectedProperty(property || null);
+    }
+  };
+
+  // フィルタリングされた支払いデータ
+  const filteredPayments = selectedProperty
+    ? allPayments.filter(
+        (payment) => payment.property_id === selectedProperty.property_id
+      )
+    : allPayments;
+
+  // デバッグログ
+  console.log("=== FILTERING DEBUG ===");
+  console.log("selectedProperty:", selectedProperty);
+  console.log("allPayments count:", allPayments.length);
+  console.log("filteredPayments count:", filteredPayments.length);
+  if (selectedProperty) {
+    console.log("Filtering by property_id:", selectedProperty.property_id);
+    console.log("Sample payment property_id:", allPayments[0]?.property_id);
+  }
 
   const handleAcceptPayment = async (paymentId: string) => {
     try {
@@ -73,34 +101,44 @@ export default function Payment() {
 
       setMessage("Payment accepted successfully!");
 
-      // Reload payments to update status
-      if (selectedProperty) {
-        loadPayments(selectedProperty.property_id);
-      }
+      // Reload all payments to update status
+      fetchAllPayments();
     } catch (error) {
       console.error("Error accepting payment:", error);
       setMessage("Error occurred while accepting payment");
     }
   };
 
-  if (!selectedProperty) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Payments</h1>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-          <p className="text-yellow-800">
-            Please select a property to view payments.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">
-        Payments for {selectedProperty.name}
-      </h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">
+          Payments{selectedProperty ? ` for ${selectedProperty.name}` : ""}
+        </h1>
+
+        {/* プロパティ選択ドロップダウン */}
+        <div className="flex items-center gap-2">
+          <label
+            htmlFor="property-select"
+            className="text-sm font-medium text-gray-700"
+          >
+            Property:
+          </label>
+          <select
+            id="property-select"
+            value={selectedProperty?.property_id || ""}
+            onChange={handlePropertyChange}
+            className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">All Properties</option>
+            {userProperties.map((property) => (
+              <option key={property.property_id} value={property.property_id}>
+                {property.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="flex justify-center items-center py-8">
@@ -109,10 +147,11 @@ export default function Payment() {
         </div>
       ) : (
         <div className="space-y-4">
-          {payments.length === 0 ? (
+          {filteredPayments.length === 0 ? (
             <div className="bg-gray-50 border border-gray-200 rounded-md p-6 text-center">
               <p className="text-gray-600 text-lg">
-                No payment data found for this property.
+                No payment data found
+                {selectedProperty ? ` for ${selectedProperty.name}` : ""}.
               </p>
               <p className="text-gray-500 text-sm mt-2">
                 Payment reports will appear here when tenants submit them.
@@ -120,7 +159,7 @@ export default function Payment() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {payments.map((payment) => (
+              {filteredPayments.map((payment) => (
                 <div
                   key={payment.payment_id}
                   className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow"

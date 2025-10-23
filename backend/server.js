@@ -109,6 +109,70 @@ app.post("/check-user", async (req, res) => {
   }
 });
 
+// GET /bill-line - 全プロパティのbill_lineデータを取得
+app.get("/bill-line", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // ユーザーがアクセス権限を持つプロパティを取得
+    const { data: userProperties, error: userPropertiesError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId);
+
+    if (userPropertiesError) throw userPropertiesError;
+
+    if (!userProperties || userProperties.length === 0) {
+      return res.json({ billLines: [] });
+    }
+
+    const propertyIds = userProperties.map((up) => up.property_id);
+
+    // 1. ユーザーのプロパティのbill_runテーブルからbill_run_idを取得
+    const { data: billRuns, error: billRunsError } = await supabase
+      .from("bill_run")
+      .select("bill_run_id, property_id")
+      .in("property_id", propertyIds);
+
+    if (billRunsError) throw billRunsError;
+
+    if (!billRuns || billRuns.length === 0) {
+      return res.json({ billLines: [] });
+    }
+
+    // 2. bill_run_idのリストを取得
+    const billRunIds = billRuns.map((run) => run.bill_run_id);
+
+    // 3. bill_run_idでbill_lineテーブルからデータを取得（関連テーブルも含む）
+    const { data: billLines, error } = await supabase
+      .from("bill_line")
+      .select(
+        `
+        bill_line_id,
+        user_id,
+        utility,
+        amount,
+        bill_run_id,
+        app_user!left(name),
+        bill_run!left(month_start, property_id)
+      `
+      )
+      .in("bill_run_id", billRunIds);
+
+    if (error) {
+      console.error("Bill line query error:", error);
+      throw error;
+    }
+
+    console.log("All bill lines fetched:", billLines?.length || 0);
+
+    res.json({ billLines });
+  } catch (error) {
+    console.error("Bill line error:", error);
+    res.status(500).json({ error: "Failed to fetch bill line data" });
+  }
+});
+
 // GET /bill-line/:propertyId - 特定プロパティのbill_lineデータを取得
 app.get("/bill-line/:propertyId", async (req, res) => {
   try {
@@ -153,7 +217,7 @@ app.get("/bill-line/:propertyId", async (req, res) => {
         amount,
         bill_run_id,
         app_user!left(name),
-        bill_run!left(month_start)
+        bill_run!left(month_start, property_id)
       `
       )
       .in("bill_run_id", billRunIds);
@@ -451,6 +515,76 @@ app.post("/properties", async (req, res) => {
   }
 });
 
+// GET /payments - 全プロパティの支払いレコード取得
+app.get("/payments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // ユーザーがアクセス権限を持つプロパティを取得
+    const { data: userProperties, error: userPropertiesError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId);
+
+    if (userPropertiesError) throw userPropertiesError;
+
+    if (!userProperties || userProperties.length === 0) {
+      return res.json({ payments: [] });
+    }
+
+    const propertyIds = userProperties.map((up) => up.property_id);
+
+    // 支払いレコードをテナント名と一緒に取得
+    const { data: payments, error: paymentsError } = await supabase
+      .from("payment")
+      .select(
+        `
+        payment_id,
+        user_id,
+        property_id,
+        amount,
+        note,
+        paid_at,
+        app_user!inner(
+          name,
+          email
+        )
+      `
+      )
+      .in("property_id", propertyIds)
+      .order("paid_at", { ascending: false });
+
+    if (paymentsError) throw paymentsError;
+
+    // 既にledgerに反映済みの支払いをチェック
+    const { data: ledgerEntries, error: ledgerError } = await supabase
+      .from("ledger")
+      .select("source_id")
+      .eq("source_type", "payment")
+      .in(
+        "source_id",
+        payments.map((p) => p.payment_id)
+      );
+
+    if (ledgerError) throw ledgerError;
+
+    const acceptedPaymentIds = new Set(ledgerEntries.map((l) => l.source_id));
+
+    // 支払いレコードに承認ステータスを追加
+    const paymentsWithStatus = payments.map((payment) => ({
+      ...payment,
+      isAccepted: acceptedPaymentIds.has(payment.payment_id),
+    }));
+
+    res.json({
+      payments: paymentsWithStatus,
+    });
+  } catch (error) {
+    console.error("Payments error:", error);
+    res.status(500).json({ error: "Failed to fetch payments" });
+  }
+});
+
 // GET /payments/:propertyId - プロパティの支払いレコード取得
 app.get("/payments/:propertyId", async (req, res) => {
   try {
@@ -722,6 +856,79 @@ app.post("/add-tenant", async (req, res) => {
   } catch (error) {
     console.error("Add tenant error:", error);
     res.status(500).json({ error: "Failed to add tenant" });
+  }
+});
+
+// GET /rent-data - 全プロパティのテナントデータ取得
+app.get("/rent-data", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting all tenant data`);
+
+    // 1. ユーザーがアクセス権限を持つプロパティを取得
+    const { data: userProperties, error: userPropertiesError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId);
+
+    if (userPropertiesError) throw userPropertiesError;
+
+    if (!userProperties || userProperties.length === 0) {
+      return res.json({ tenants: [], tenantRents: [] });
+    }
+
+    const propertyIds = userProperties.map((up) => up.property_id);
+
+    // 2. 全プロパティのテナントを取得
+    const { data: allUserProperties, error: userPropsError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        user_id,
+        property_id,
+        app_user!inner(
+          user_id,
+          name,
+          email,
+          user_type,
+          personal_multiplier
+        ),
+        property:property_id(name)
+        `
+      )
+      .in("property_id", propertyIds);
+
+    if (userPropsError) throw userPropsError;
+
+    // テナントのみをフィルタリング（オーナーを除外）
+    const tenants = allUserProperties
+      .map((up) => ({
+        ...up.app_user,
+        property_id: up.property_id,
+        property_name: up.property.name,
+      }))
+      .filter((user) => user.user_type === "tenant");
+
+    console.log(
+      `[SECURITY] Found ${tenants.length} tenants across all properties`
+    );
+
+    // 3. 全プロパティのテナント家賃データを取得
+    const { data: allTenantRents, error: rentsError } = await supabase
+      .from("tenant_rent")
+      .select("*")
+      .in("property_id", propertyIds);
+
+    if (rentsError) throw rentsError;
+
+    res.json({
+      tenants,
+      tenantRents: allTenantRents,
+    });
+  } catch (error) {
+    console.error("Rent data error:", error);
+    res.status(500).json({ error: "Failed to fetch rent data" });
   }
 });
 
@@ -1215,6 +1422,100 @@ app.post("/run-bill", async (req, res) => {
   } catch (error) {
     console.error("Run bill error:", error);
     res.status(500).json({ error: "Failed to run bill calculation" });
+  }
+});
+
+// GET /dashboard - 全プロパティのダッシュボードデータ取得
+app.get("/dashboard", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting all dashboard data`);
+
+    // 1. ユーザーがアクセス権限を持つプロパティを取得
+    const { data: userProperties, error: userPropertiesError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId);
+
+    if (userPropertiesError) throw userPropertiesError;
+
+    if (!userProperties || userProperties.length === 0) {
+      return res.json({ tenants: [] });
+    }
+
+    const propertyIds = userProperties.map((up) => up.property_id);
+
+    // 2. 全プロパティのテナントを取得
+    const { data: allUserProperties, error: userPropsError } = await supabase
+      .from("user_property")
+      .select(
+        `
+        user_id,
+        property_id,
+        app_user!inner(*),
+        property:property_id(name)
+        `
+      )
+      .in("property_id", propertyIds);
+
+    if (userPropsError) throw userPropsError;
+
+    // テナントのみをフィルタリング（オーナーを除外）
+    const tenants = allUserProperties
+      .map((up) => ({
+        ...up.app_user,
+        property_id: up.property_id,
+        property_name: up.property.name,
+      }))
+      .filter((user) => user.user_type === "tenant");
+
+    console.log(
+      `[SECURITY] Found ${tenants.length} tenants across all properties`
+    );
+
+    // 3. 各テナントの最新ledgerレコードを取得
+    const dashboardData = [];
+
+    for (const tenant of tenants) {
+      const { data: latestLedger, error: ledgerError } = await supabase
+        .from("ledger")
+        .select("amount, posted_at")
+        .eq("user_id", tenant.user_id)
+        .eq("property_id", tenant.property_id)
+        .order("posted_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (ledgerError && ledgerError.code !== "PGRST116") {
+        console.error(
+          `Error fetching ledger for tenant ${tenant.user_id}:`,
+          ledgerError
+        );
+        continue;
+      }
+
+      dashboardData.push({
+        user_id: tenant.user_id,
+        name: tenant.name,
+        email: tenant.email,
+        current_balance: latestLedger ? latestLedger.amount : 0,
+        last_updated: latestLedger ? latestLedger.posted_at : null,
+        property_id: tenant.property_id.toString(),
+        property_name: tenant.property_name,
+      });
+    }
+
+    console.log(
+      `[SECURITY] Dashboard data prepared: ${dashboardData.length} tenants`
+    );
+
+    res.json({
+      tenants: dashboardData,
+    });
+  } catch (error) {
+    console.error("Dashboard error:", error);
+    res.status(500).json({ error: "Failed to fetch dashboard data" });
   }
 });
 

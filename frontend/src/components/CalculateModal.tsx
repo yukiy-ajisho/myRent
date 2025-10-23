@@ -69,8 +69,9 @@ export default function CalculateModal({
   const [utilityAmounts, setUtilityAmounts] = useState<Record<string, string>>(
     {}
   );
-  const [saveStatus, setSaveStatus] =
-    useState < Record<string, "saving" | "saved" | "error">>({});
+  const [saveStatus, setSaveStatus] = useState<
+    Record<string, "saving" | "saved" | "error">
+  >({});
   const [debounceTimers, setDebounceTimers] = useState<
     Record<string, NodeJS.Timeout>
   >({});

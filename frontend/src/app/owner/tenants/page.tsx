@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useProperty } from "@/contexts/PropertyContext";
+import { useProperty, Property } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
 
 interface Tenant {
@@ -10,11 +10,16 @@ interface Tenant {
   email: string;
   user_type: string;
   personal_multiplier: number;
+  property_id: string;
+  property_name: string;
 }
 
 export default function Tenants() {
-  const { selectedProperty } = useProperty();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const { userProperties } = useProperty();
+  const [allTenants, setAllTenants] = useState<Tenant[]>([]);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -23,34 +28,30 @@ export default function Tenants() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    personal_multiplier: 1,
+    propertyId: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // プロパティが変更された時の処理
+  // 初期データ読み込み
   useEffect(() => {
-    if (selectedProperty) {
-      loadTenants(selectedProperty.property_id);
-    }
-  }, [selectedProperty]);
+    fetchAllTenants();
+  }, []);
 
-  const loadTenants = async (propertyId: string) => {
+  const fetchAllTenants = async () => {
     try {
       setIsLoading(true);
       setMessage("");
 
       console.log("=== TENANTS DEBUG ===");
-      console.log("Property ID:", propertyId);
-      console.log("Starting API call...");
+      console.log("Fetching all tenants...");
 
-      // 既存のrent-data APIを使用してテナント情報を取得
-      const data = await api.getRentData(propertyId);
+      const data = await api.getAllRentData();
       console.log("API Response received:", data);
 
       const tenants = data.tenants || [];
-      console.log("Tenants from API:", tenants);
+      console.log("All tenants from API:", tenants);
 
-      setTenants(tenants);
+      setAllTenants(tenants);
     } catch (error) {
       console.error("Error loading tenants:", error);
       setMessage("Error loading tenants");
@@ -59,10 +60,33 @@ export default function Tenants() {
     }
   };
 
+  // プロパティ選択変更
+  const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const propertyId = e.target.value;
+    if (propertyId === "") {
+      setSelectedProperty(null);
+    } else {
+      const property = userProperties.find(
+        (p) => p.property_id.toString() === propertyId
+      );
+      setSelectedProperty(property || null);
+    }
+  };
+
+  // フィルタリングされたテナントデータ
+  const filteredTenants = selectedProperty
+    ? allTenants.filter(
+        (tenant) => tenant.property_id === selectedProperty.property_id
+      )
+    : allTenants;
+
   // フォーム送信処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProperty) return;
+    if (!formData.propertyId) {
+      setMessage("Please select a property");
+      return;
+    }
 
     setIsSubmitting(true);
     setMessage("");
@@ -71,16 +95,15 @@ export default function Tenants() {
       await api.addTenant({
         name: formData.name,
         email: formData.email,
-        personal_multiplier: formData.personal_multiplier,
-        propertyId: selectedProperty.property_id,
+        propertyId: parseInt(formData.propertyId),
       });
 
       setMessage("Tenant found and added to property successfully!");
-      setFormData({ name: "", email: "", personal_multiplier: 1 });
+      setFormData({ name: "", email: "", propertyId: "" });
       setShowForm(false);
 
-      // テナント一覧を再読み込み
-      loadTenants(selectedProperty.property_id);
+      // 全テナント一覧を再読み込み
+      fetchAllTenants();
     } catch (error) {
       console.error("Error adding tenant:", error);
       setMessage(
@@ -91,31 +114,44 @@ export default function Tenants() {
     }
   };
 
-  if (!selectedProperty) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Tenants</h1>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-          <p className="text-yellow-800">
-            Please select a property to view tenants.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">
-          Tenants for {selectedProperty.name}
+          Tenants{selectedProperty ? ` for ${selectedProperty.name}` : ""}
         </h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Add Tenant
-        </button>
+
+        <div className="flex items-center gap-4">
+          {/* プロパティ選択ドロップダウン */}
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="property-select"
+              className="text-sm font-medium text-gray-700"
+            >
+              Property:
+            </label>
+            <select
+              id="property-select"
+              value={selectedProperty?.property_id || ""}
+              onChange={handlePropertyChange}
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">All Properties</option>
+              {userProperties.map((property) => (
+                <option key={property.property_id} value={property.property_id}>
+                  {property.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Add Tenant
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -125,17 +161,18 @@ export default function Tenants() {
         </div>
       ) : (
         <div className="space-y-4">
-          {tenants.length === 0 ? (
+          {filteredTenants.length === 0 ? (
             <div className="bg-gray-50 border border-gray-200 rounded-md p-6 text-center">
               <p className="text-gray-600">
-                No tenants found for this property.
+                No tenants found
+                {selectedProperty ? ` for ${selectedProperty.name}` : ""}.
               </p>
             </div>
           ) : (
             <div className="grid gap-4">
-              {tenants.map((tenant) => (
+              {filteredTenants.map((tenant) => (
                 <div
-                  key={tenant.user_id}
+                  key={`${tenant.user_id}-${tenant.property_id}`}
                   className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow"
                 >
                   <div className="flex items-center justify-between">
@@ -150,6 +187,9 @@ export default function Tenants() {
                         </span>
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                           Multiplier: {tenant.personal_multiplier}
+                        </span>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          {tenant.property_name}
                         </span>
                       </div>
                     </div>
@@ -186,7 +226,7 @@ export default function Tenants() {
             <h2 className="text-xl font-bold mb-4">Add Existing Tenant</h2>
             <p className="text-sm text-gray-600 mb-4">
               Search for an existing tenant by name and email address. If found,
-              they will be added to this property.
+              they will be added to the selected property.
             </p>
 
             <form onSubmit={handleSubmit}>
@@ -220,27 +260,26 @@ export default function Tenants() {
 
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">
-                  Personal Multiplier
+                  Property
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  step="1"
-                  value={formData.personal_multiplier}
+                <select
+                  value={formData.propertyId}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      personal_multiplier: parseInt(e.target.value) || 1,
-                    })
+                    setFormData({ ...formData, propertyId: e.target.value })
                   }
-                  placeholder="1"
                   className="w-full p-2 border rounded"
                   required
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Multiplier for utility cost calculation (1 - 10)
-                </p>
+                >
+                  <option value="">Select Property</option>
+                  {userProperties.map((property) => (
+                    <option
+                      key={property.property_id}
+                      value={property.property_id}
+                    >
+                      {property.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex gap-2">
@@ -249,7 +288,7 @@ export default function Tenants() {
                   disabled={isSubmitting}
                   className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
                 >
-                  {isSubmitting ? "Searching..." : "Search & Add Tenant"}
+                  {isSubmitting ? "Adding..." : "Add Tenant"}
                 </button>
                 <button
                   type="button"

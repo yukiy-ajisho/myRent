@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useProperty } from "@/contexts/PropertyContext";
+import { useState, useEffect } from "react";
+import { useProperty, Property } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
 
 // Bill Line データの型定義
@@ -16,12 +16,16 @@ interface BillLine {
   };
   bill_run: {
     month_start: string;
+    property_id: string;
   };
 }
 
 export default function History() {
-  const { selectedProperty, isLoading: propertyLoading } = useProperty();
-  const [billLines, setBillLines] = useState<BillLine[]>([]);
+  const { userProperties } = useProperty();
+  const [allBillLines, setAllBillLines] = useState<BillLine[]>([]);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,54 +34,53 @@ export default function History() {
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedName, setSelectedName] = useState<string>("");
 
-  const fetchBillLineData = useCallback(async () => {
-    if (!selectedProperty) return;
-
-    try {
-      setIsLoading(true);
-      setError(null);
-      console.log("=== DEBUG INFO ===");
-      console.log("Selected property:", selectedProperty);
-      console.log("Property ID:", selectedProperty.property_id);
-      console.log(
-        "API URL:",
-        `http://localhost:4000/bill-line/${selectedProperty.property_id}`
-      );
-
-      const data = await api.getBillLineData(selectedProperty.property_id);
-      console.log("API Response:", data);
-      console.log("Bill Lines:", data.billLines);
-      if (data.billLines && data.billLines.length > 0) {
-        console.log("First bill line:", data.billLines[0]);
-        console.log("app_user:", data.billLines[0].app_user);
-        console.log("bill_run:", data.billLines[0].bill_run);
-      }
-      setBillLines(data.billLines || []);
-    } catch (err) {
-      console.error("=== ERROR DETAILS ===");
-      console.error("Error object:", err);
-      console.error("Error message:", err.message);
-      console.error("Error stack:", err.stack);
-      setError(`データの取得に失敗しました: ${err.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedProperty]);
-
-  // プロパティが選択されたときにデータを取得
+  // 初回ロード時のみ全データを取得
   useEffect(() => {
-    if (selectedProperty && !propertyLoading) {
-      fetchBillLineData();
+    const fetchAllData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        console.log("=== FETCHING ALL BILL LINE DATA ===");
+
+        const data = await api.getBillLineData(); // property_idなし
+        console.log("API Response:", data);
+        console.log("All Bill Lines:", data.billLines?.length || 0);
+
+        setAllBillLines(data.billLines || []);
+      } catch (err) {
+        console.error("=== ERROR DETAILS ===");
+        console.error("Error object:", err);
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        console.error("Error message:", errorMessage);
+        setError(`データの取得に失敗しました: ${errorMessage}`);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAllData();
+  }, []);
+
+  // プロパティ選択のハンドラー
+  const handlePropertyChange = (propertyId: string) => {
+    console.log("=== PROPERTY CHANGE DEBUG ===");
+    console.log("Selected propertyId:", propertyId);
+    console.log("userProperties:", userProperties);
+
+    if (propertyId === "") {
+      console.log("Setting selectedProperty to null");
+      setSelectedProperty(null);
+      return;
     }
-  }, [selectedProperty, propertyLoading, fetchBillLineData]);
 
-  if (propertyLoading) {
-    return <div>プロパティを読み込み中...</div>;
-  }
-
-  if (!selectedProperty) {
-    return <div>プロパティが選択されていません</div>;
-  }
+    // 文字列を数値に変換してから比較
+    const property = userProperties.find(
+      (p) => p.property_id === parseInt(propertyId)
+    );
+    console.log("Found property:", property);
+    setSelectedProperty(property || null);
+  };
 
   if (isLoading) {
     return <div>データを読み込み中...</div>;
@@ -87,15 +90,23 @@ export default function History() {
     return <div>{error}</div>;
   }
 
-  if (billLines.length === 0) {
+  if (allBillLines.length === 0) {
     return <div>データがありません</div>;
   }
 
+  // プロパティでフィルタリング
+  const propertyFilteredBillLines = selectedProperty
+    ? allBillLines.filter(
+        (billLine) =>
+          billLine.bill_run?.property_id === selectedProperty.property_id
+      )
+    : allBillLines;
+
   // Sort bill lines: first by bill_run_id (ascending), then by name (ascending)
-  const sortedBillLines = billLines.sort((a, b) => {
+  const sortedBillLines = propertyFilteredBillLines.sort((a, b) => {
     // First priority: bill_run_id ascending
     if (a.bill_run_id !== b.bill_run_id) {
-      return a.bill_run_id - b.bill_run_id;
+      return parseInt(a.bill_run_id) - parseInt(b.bill_run_id);
     }
 
     // Second priority: name ascending within same bill_run_id
@@ -138,8 +149,43 @@ export default function History() {
     return yearMatch && monthMatch && nameMatch;
   });
 
+  console.log("=== RENDER DEBUG ===");
+  console.log("selectedProperty:", selectedProperty);
+  console.log("userProperties:", userProperties);
+  if (userProperties.length > 0) {
+    console.log("First userProperty structure:", userProperties[0]);
+    console.log(
+      "First userProperty property_id type:",
+      typeof userProperties[0].property_id
+    );
+  }
+
   return (
-    <div>
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">History</h1>
+        <div className="flex items-center space-x-2">
+          <label
+            htmlFor="property-select"
+            className="text-sm font-medium text-gray-700"
+          >
+            Property:
+          </label>
+          <select
+            id="property-select"
+            value={selectedProperty?.property_id || ""}
+            onChange={(e) => handlePropertyChange(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">All Properties</option>
+            {userProperties.map((property) => (
+              <option key={property.property_id} value={property.property_id}>
+                {property.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       <div>
         {/* Filter Controls */}
         <div
