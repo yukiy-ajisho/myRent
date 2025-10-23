@@ -27,24 +27,26 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     },
   });
 
-  console.log("Response status:", response.status);
-  console.log(
-    "Response headers:",
-    Object.fromEntries(response.headers.entries())
-  );
-
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Error response:", errorText);
-
+    let errorData;
     try {
-      const error = JSON.parse(errorText);
-      throw new Error(error.error || "API request failed");
+      errorData = await response.json();
     } catch (parseError) {
-      throw new Error(
-        `API request failed: ${response.status} ${response.statusText}`
-      );
+      // JSONパースに失敗した場合は、ステータスコードに基づいてエラーメッセージを生成
+      if (response.status === 404) {
+        errorData = { error: "Tenant not found." };
+      } else if (response.status === 400) {
+        errorData = { error: "Bad request." };
+      } else {
+        errorData = {
+          error: `API request failed: ${response.status} ${response.statusText}`,
+        };
+      }
     }
+
+    const apiError = new Error(errorData.error || "API request failed");
+    (apiError as any).response = { data: errorData };
+    throw apiError;
   }
 
   return response.json();
@@ -179,8 +181,8 @@ export const api = {
     return apiRequest("/rent-data");
   },
 
-  // Add tenant (new or existing)
-  addTenant: (data: { name: string; email: string; propertyId: number }) => {
+  // Add tenant (existing only)
+  addTenant: (data: { email: string; propertyId: number }) => {
     return apiRequest("/add-tenant", {
       method: "POST",
       body: JSON.stringify(data),

@@ -25,8 +25,9 @@ export default function Tenants() {
 
   // フォーム関連の状態
   const [showForm, setShowForm] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [addedTenantName, setAddedTenantName] = useState("");
   const [formData, setFormData] = useState({
-    name: "",
     email: "",
     propertyId: "",
   });
@@ -83,6 +84,13 @@ export default function Tenants() {
   // フォーム送信処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // バリデーション
+    if (!formData.email.trim()) {
+      setMessage("Please enter an email address");
+      return;
+    }
+
     if (!formData.propertyId) {
       setMessage("Please select a property");
       return;
@@ -92,26 +100,41 @@ export default function Tenants() {
     setMessage("");
 
     try {
-      await api.addTenant({
-        name: formData.name,
+      const response = await api.addTenant({
         email: formData.email,
         propertyId: parseInt(formData.propertyId),
       });
 
-      setMessage("Tenant found and added to property successfully!");
-      setFormData({ name: "", email: "", propertyId: "" });
-      setShowForm(false);
+      // 成功時：テナント名を取得して成功画面を表示
+      setAddedTenantName(response.tenantName || "Unknown");
+      setShowSuccess(true);
+      setFormData({ email: "", propertyId: "" });
 
       // 全テナント一覧を再読み込み
       fetchAllTenants();
-    } catch (error) {
-      console.error("Error adding tenant:", error);
-      setMessage(
-        "Error: Tenant not found or could not be added. Please check the name and email address."
-      );
+    } catch (error: any) {
+      // バックエンドからのエラーメッセージを取得
+      let errorMessage = "Error: Failed to add tenant";
+
+      if (error?.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (
+        error?.message &&
+        !error.message.includes("API request failed")
+      ) {
+        errorMessage = error.message;
+      }
+
+      setMessage(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSuccessConfirm = () => {
+    setShowSuccess(false);
+    setShowForm(false);
+    setAddedTenantName("");
   };
 
   return (
@@ -201,104 +224,131 @@ export default function Tenants() {
         </div>
       )}
 
-      {message && (
-        <div
-          className={`mt-4 p-4 rounded-md ${
-            message.includes("Error")
-              ? "bg-red-50 border border-red-200"
-              : "bg-green-50 border border-green-200"
-          }`}
-        >
-          <p
-            className={
-              message.includes("Error") ? "text-red-800" : "text-green-800"
-            }
-          >
-            {message}
-          </p>
-        </div>
-      )}
-
       {/* テナント追加フォーム */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-96">
-            <h2 className="text-xl font-bold mb-4">Add Tenant</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Search for a tenant by email address. If found, they will be added
-              to the selected property.
-            </p>
-
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  placeholder="Enter tenant name"
-                  className="w-full p-2 border rounded"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Email</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  placeholder="Enter tenant email"
-                  className="w-full p-2 border rounded"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">
-                  Property
-                </label>
-                <select
-                  value={formData.propertyId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, propertyId: e.target.value })
-                  }
-                  className="w-full p-2 border rounded"
-                  required
+            {showSuccess ? (
+              // 成功画面
+              <div className="text-center">
+                <div className="text-6xl mb-4">🎉</div>
+                <h2 className="text-xl font-bold mb-4 text-green-600">
+                  <span className="bg-green-100 px-2 py-1 rounded font-bold text-green-800">
+                    {addedTenantName}
+                  </span>{" "}
+                  is added!
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  The tenant has been successfully added to the property.
+                </p>
+                <button
+                  onClick={handleSuccessConfirm}
+                  className="w-full px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
                 >
-                  <option value="">Select Property</option>
-                  {userProperties.map((property) => (
-                    <option
-                      key={property.property_id}
-                      value={property.property_id}
+                  Confirm
+                </button>
+              </div>
+            ) : (
+              // フォーム画面
+              <>
+                <h2 className="text-xl font-bold mb-4">Add Tenant</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Search for a tenant by email address. If found, they will be
+                  added to the selected property.
+                </p>
+
+                <form onSubmit={handleSubmit}>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
+                      placeholder="Enter tenant email"
+                      className="w-full p-2 border rounded"
+                      required
+                    />
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">
+                      Property
+                    </label>
+                    <select
+                      value={formData.propertyId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, propertyId: e.target.value })
+                      }
+                      className="w-full p-2 border rounded"
+                      required
                     >
-                      {property.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                      <option value="">Select Property</option>
+                      {userProperties.map((property) => (
+                        <option
+                          key={property.property_id}
+                          value={property.property_id}
+                        >
+                          {property.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-                >
-                  {isSubmitting ? "Adding..." : "Add Tenant"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="px-4 py-2 bg-gray-500 text-white rounded"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+                  {message && (
+                    <div
+                      className={`mb-4 p-3 rounded-md ${
+                        message.includes("Error") ||
+                        message.includes("not found") ||
+                        message.includes("already exists") ||
+                        message.includes("Cannot add")
+                          ? "bg-red-50 border border-red-200"
+                          : "bg-green-50 border border-green-200"
+                      }`}
+                    >
+                      <p
+                        className={
+                          message.includes("Error") ||
+                          message.includes("not found") ||
+                          message.includes("already exists") ||
+                          message.includes("Cannot add")
+                            ? "text-red-800"
+                            : "text-green-800"
+                        }
+                      >
+                        {message}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+                    >
+                      {isSubmitting ? "Adding..." : "Add Tenant"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForm(false);
+                        setShowSuccess(false);
+                        setFormData({ email: "", propertyId: "" });
+                        setMessage("");
+                        setAddedTenantName("");
+                      }}
+                      className="px-4 py-2 bg-gray-500 text-white rounded"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}

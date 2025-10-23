@@ -754,7 +754,7 @@ app.post("/payments/:paymentId/accept", async (req, res) => {
 // POST /add-tenant - テナント追加（新規作成 or 既存テナント追加）
 app.post("/add-tenant", async (req, res) => {
   try {
-    const { name, email, personal_multiplier, propertyId } = req.body;
+    const { email, propertyId } = req.body;
     const userId = req.user.id;
 
     // ユーザーがこのプロパティにアクセス権限があるかチェック
@@ -781,14 +781,7 @@ app.post("/add-tenant", async (req, res) => {
     if (existingUser) {
       // 既存ユーザーが見つかった場合
       if (existingUser.user_type === "owner") {
-        return res.status(400).json({ error: "Cannot add owner as tenant" });
-      }
-
-      // 既存テナントの場合、名前が異なる場合は警告
-      if (existingUser.name !== name) {
-        return res.status(400).json({
-          error: `Email already exists with different name (${existingUser.name}). Please use the same name or different email.`,
-        });
+        return res.status(400).json({ error: "Cannot add the tenant" });
       }
 
       // 既存テナントの場合
@@ -808,20 +801,10 @@ app.post("/add-tenant", async (req, res) => {
           .json({ error: "Tenant already exists in this property" });
       }
     } else {
-      // 新規テナント作成
-      const { data: newTenant, error: createError } = await supabase
-        .from("app_user")
-        .insert({
-          name,
-          email,
-          user_type: "tenant",
-          personal_multiplier: personal_multiplier || 1,
-        })
-        .select("user_id")
-        .single();
-
-      if (createError) throw createError;
-      tenantUserId = newTenant.user_id;
+      // 既存ユーザーが見つからない場合はエラー
+      return res.status(404).json({
+        error: "Tenant not found.",
+      });
     }
 
     // プロパティに所属させる
@@ -849,9 +832,8 @@ app.post("/add-tenant", async (req, res) => {
 
     res.json({
       success: true,
-      message: existingUser
-        ? "Existing tenant added to property"
-        : "New tenant created and added to property",
+      message: "Tenant added to property successfully",
+      tenantName: existingUser.name,
     });
   } catch (error) {
     console.error("Add tenant error:", error);
