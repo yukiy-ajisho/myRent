@@ -556,10 +556,10 @@ app.get("/payments", async (req, res) => {
 
     if (paymentsError) throw paymentsError;
 
-    // 既にledgerに反映済みの支払いをチェック
+    // 既にledgerに反映済みの支払いをチェック（確認日時も取得）
     const { data: ledgerEntries, error: ledgerError } = await supabase
       .from("ledger")
-      .select("source_id")
+      .select("source_id, posted_at")
       .eq("source_type", "payment")
       .in(
         "source_id",
@@ -568,12 +568,17 @@ app.get("/payments", async (req, res) => {
 
     if (ledgerError) throw ledgerError;
 
-    const acceptedPaymentIds = new Set(ledgerEntries.map((l) => l.source_id));
+    // 確認日時をマップに変換
+    const confirmedAtMap = new Map();
+    ledgerEntries.forEach((entry) => {
+      confirmedAtMap.set(entry.source_id, entry.posted_at);
+    });
 
-    // 支払いレコードに承認ステータスを追加
+    // 支払いレコードに承認ステータスと確認日時を追加
     const paymentsWithStatus = payments.map((payment) => ({
       ...payment,
-      isAccepted: acceptedPaymentIds.has(payment.payment_id),
+      isAccepted: confirmedAtMap.has(payment.payment_id),
+      confirmedAt: confirmedAtMap.get(payment.payment_id) || null,
     }));
 
     res.json({
@@ -625,10 +630,10 @@ app.get("/payments/:propertyId", async (req, res) => {
 
     if (paymentsError) throw paymentsError;
 
-    // 既にledgerに反映済みの支払いをチェック
+    // 既にledgerに反映済みの支払いをチェック（確認日時も取得）
     const { data: ledgerEntries, error: ledgerError } = await supabase
       .from("ledger")
-      .select("source_id")
+      .select("source_id, posted_at")
       .eq("source_type", "payment")
       .in(
         "source_id",
@@ -637,12 +642,17 @@ app.get("/payments/:propertyId", async (req, res) => {
 
     if (ledgerError) throw ledgerError;
 
-    const acceptedPaymentIds = new Set(ledgerEntries.map((l) => l.source_id));
+    // 確認日時をマップに変換
+    const confirmedAtMap = new Map();
+    ledgerEntries.forEach((entry) => {
+      confirmedAtMap.set(entry.source_id, entry.posted_at);
+    });
 
-    // 支払いレコードに承認ステータスを追加
+    // 支払いレコードに承認ステータスと確認日時を追加
     const paymentsWithStatus = payments.map((payment) => ({
       ...payment,
-      isAccepted: acceptedPaymentIds.has(payment.payment_id),
+      isAccepted: confirmedAtMap.has(payment.payment_id),
+      confirmedAt: confirmedAtMap.get(payment.payment_id) || null,
     }));
 
     res.json({

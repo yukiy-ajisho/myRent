@@ -395,7 +395,7 @@ export default function TenantPayment() {
                       payment.isAccepted ? "text-green-600" : "text-yellow-600"
                     }`}
                   >
-                    {payment.isAccepted ? "✅ Accepted" : "⏳ Pending"}
+                    {payment.isAccepted ? "✅ Confirmed" : "⏳ Pending"}
                   </p>
                 </div>
               </div>

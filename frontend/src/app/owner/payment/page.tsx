@@ -16,6 +16,7 @@ interface Payment {
     email: string;
   };
   isAccepted: boolean;
+  confirmedAt: string | null;
 }
 
 export default function Payment() {
@@ -181,7 +182,16 @@ export default function Payment() {
                         </span>
                         {payment.isAccepted ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            Accepted
+                            Confirmed
+                            {payment.confirmedAt && (
+                              <span className="ml-1 text-xs opacity-75">
+                                (
+                                {new Date(
+                                  payment.confirmedAt
+                                ).toLocaleDateString()}
+                                )
+                              </span>
+                            )}
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -195,22 +205,18 @@ export default function Payment() {
                         </p>
                       )}
                     </div>
-                    <div className="ml-4">
-                      {!payment.isAccepted ? (
+                    {!payment.isAccepted && (
+                      <div className="ml-4">
                         <button
                           onClick={() =>
                             handleAcceptPayment(payment.payment_id)
                           }
                           className="px-6 py-3 bg-green-500 text-white rounded-lg font-semibold text-lg hover:bg-green-600 shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
                         >
-                          ✅ Accept
+                          ✅ Confirm
                         </button>
-                      ) : (
-                        <div className="px-6 py-3 bg-gray-100 text-gray-600 rounded-lg font-semibold text-lg border-2 border-gray-300">
-                          ✓ Accepted
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
