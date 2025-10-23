@@ -82,8 +82,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="h-screen flex bg-gray-50">
-      {/* ナビゲーションバー（左側18%） */}
-      <div className="w-[18%] h-screen bg-white shadow-lg flex flex-col border-r border-gray-200">
+      {/* ナビゲーションバー（左側270px固定、スライドアウト効果） */}
+      <div className="w-0 xl:w-[270px] h-screen bg-white shadow-lg flex flex-col border-r border-gray-200 transition-[width,transform] duration-300 ease-in-out transform -translate-x-full xl:translate-x-0 overflow-hidden">
         {/* ロゴ・アプリ名 */}
         <div className="p-6">
           <div className="flex items-center" style={{ gap: "8px" }}>
@@ -156,11 +156,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </nav>
       </div>
 
-      {/* コンテンツエリア（右側82%） */}
-      <div className="flex-1 flex flex-col">
-        {/* ヘッダー（上部10%） */}
+      {/* コンテンツエリア（右側残り全スペース、スムーズ拡張） */}
+      <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out">
+        {/* ヘッダー（上部15%） */}
         <header
-          className="h-1/10 bg-white shadow-sm border-b border-gray-200 px-8 flex items-center"
+          className="h-[90px] bg-white shadow-sm border-b border-gray-200 px-8 flex items-center"
           style={{ paddingLeft: "30px" }}
         >
           <div className="flex items-center space-x-4">
