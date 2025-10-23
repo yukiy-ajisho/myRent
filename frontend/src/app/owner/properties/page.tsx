@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import TenantStayModal from "@/components/TenantStayModal";
 import DivisionMethodsModal from "@/components/DivisionMethodsModal";
 import CalculateModal from "@/components/CalculateModal";
+import CalculationSuccessModal from "@/components/CalculationSuccessModal";
 
 interface Property {
   property_id: string;
@@ -58,6 +59,7 @@ export default function Properties() {
 
   // Calculate管理モーダル関連
   const [calculateModalOpen, setCalculateModalOpen] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
 
   // Bill runs管理
   const [billRuns, setBillRuns] = useState<
@@ -678,8 +680,17 @@ export default function Properties() {
           }}
           isOpen={calculateModalOpen}
           onClose={handleCalculateModalClose}
+          onCalculationComplete={() => {
+            setSuccessModalOpen(true);
+          }}
         />
       )}
+
+      {/* 成功モーダル */}
+      <CalculationSuccessModal
+        isOpen={successModalOpen}
+        onClose={() => setSuccessModalOpen(false)}
+      />
     </div>
   );
 }
