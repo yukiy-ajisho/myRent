@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import TenantStayModal from "@/components/TenantStayModal";
+import DivisionMethodsModal from "@/components/DivisionMethodsModal";
+import CalculateModal from "@/components/CalculateModal";
 
 interface Property {
   property_id: string;
@@ -47,6 +49,15 @@ export default function Properties() {
   // Stay管理モーダル関連
   const [stayModalOpen, setStayModalOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+
+  // Division Methods管理モーダル関連
+  const [divisionModalOpen, setDivisionModalOpen] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(
+    null
+  );
+
+  // Calculate管理モーダル関連
+  const [calculateModalOpen, setCalculateModalOpen] = useState(false);
 
   // プロパティ作成フォーム関連の状態
   const [showForm, setShowForm] = useState(false);
@@ -262,6 +273,26 @@ export default function Properties() {
     setSelectedTenant(null);
   };
 
+  const handleDivisionClick = (property: Property) => {
+    setSelectedProperty(property);
+    setDivisionModalOpen(true);
+  };
+
+  const handleDivisionModalClose = () => {
+    setDivisionModalOpen(false);
+    setSelectedProperty(null);
+  };
+
+  const handleCalculateClick = (property: Property) => {
+    setSelectedProperty(property);
+    setCalculateModalOpen(true);
+  };
+
+  const handleCalculateModalClose = () => {
+    setCalculateModalOpen(false);
+    setSelectedProperty(null);
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -296,20 +327,40 @@ export default function Properties() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {property.name}
-                      </h3>
-                      <p className="text-gray-600 mt-1">{property.address}</p>
-                      <div className="mt-2 flex gap-2">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            property.active
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {property.active ? "Active" : "Inactive"}
-                        </span>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {property.name}
+                          </h3>
+                          <p className="text-gray-600 mt-1">
+                            {property.address}
+                          </p>
+                          <div className="mt-2 flex gap-2">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                property.active
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {property.active ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => handleDivisionClick(property)}
+                            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                          >
+                            Division Methods
+                          </button>
+                          <button
+                            onClick={() => handleCalculateClick(property)}
+                            className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
+                          >
+                            Calculate
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-3">
                         <p className="text-sm font-medium text-gray-700 mb-2">
@@ -502,6 +553,34 @@ export default function Properties() {
           tenant={selectedTenant}
           isOpen={stayModalOpen}
           onClose={handleStayModalClose}
+        />
+      )}
+
+      {/* Division Methods管理モーダル */}
+      {divisionModalOpen && selectedProperty && (
+        <DivisionMethodsModal
+          property={{
+            property_id: selectedProperty.property_id,
+            name: selectedProperty.name,
+            timezone: "UTC",
+            active: selectedProperty.active,
+          }}
+          isOpen={divisionModalOpen}
+          onClose={handleDivisionModalClose}
+        />
+      )}
+
+      {/* Calculate管理モーダル */}
+      {calculateModalOpen && selectedProperty && (
+        <CalculateModal
+          property={{
+            property_id: selectedProperty.property_id,
+            name: selectedProperty.name,
+            timezone: "UTC",
+            active: selectedProperty.active,
+          }}
+          isOpen={calculateModalOpen}
+          onClose={handleCalculateModalClose}
         />
       )}
     </div>

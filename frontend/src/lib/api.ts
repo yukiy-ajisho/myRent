@@ -321,4 +321,9 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Get latest bill run month for a property
+  getLatestBillRunMonth: (propertyId: string) => {
+    return apiRequest(`/latest-bill-run-month/${propertyId}`);
+  },
 };

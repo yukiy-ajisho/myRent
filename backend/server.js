@@ -3202,6 +3202,59 @@ app.post("/owner-tenant", async (req, res) => {
   }
 });
 
+// GET /latest-bill-run-month/:propertyId - 最新のbill_run月を取得
+app.get("/latest-bill-run-month/:propertyId", async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting latest bill run month for property ${propertyId}`
+    );
+
+    // アクセス権限チェック
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${propertyId}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // 最新のmonth_startを取得
+    const { data: latestBillRun, error } = await supabase
+      .from("bill_run")
+      .select("month_start")
+      .eq("property_id", propertyId)
+      .order("month_start", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
+
+    console.log(
+      `[SECURITY] Latest bill run month for property ${propertyId}: ${
+        latestBillRun?.month_start || "none"
+      }`
+    );
+
+    res.json({
+      latestMonth: latestBillRun?.month_start || null,
+    });
+  } catch (error) {
+    console.error("Latest bill run month error:", error);
+    res.status(500).json({ error: "Failed to fetch latest month" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });

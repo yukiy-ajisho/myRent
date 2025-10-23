@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 
 interface Property {
@@ -76,19 +76,106 @@ export default function CalculateModal({
     Record<string, NodeJS.Timeout>
   >({});
 
-  // Initialize with current month
-  useEffect(() => {
-    const now = new Date();
-    const currentMonth = now.toISOString().slice(0, 7); // YYYY-MM format
-    setSelectedMonth(currentMonth);
+  const getNextMonth = useCallback((monthString: string) => {
+    // monthString is already in YYYY-MM-DD format, so we can use it directly
+    console.log("getNextMonth input:", monthString);
+
+    // Parse the date string to avoid timezone issues
+    const [year, month] = monthString.split("-").map(Number);
+    console.log("getNextMonth parsed year:", year, "month:", month);
+
+    // Create date object using local timezone
+    const date = new Date(year, month - 1, 1); // month is 0-indexed
+    console.log("getNextMonth parsed date:", date);
+
+    const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    console.log("getNextMonth next month:", nextMonth);
+    const result = nextMonth.toISOString().slice(0, 7); // YYYY-MM format
+    console.log("getNextMonth result:", result);
+    return result;
   }, []);
+
+  const loadLatestMonth = useCallback(
+    async (propertyId: string) => {
+      try {
+        const data = await api.getLatestBillRunMonth(propertyId);
+        if (data.latestMonth) {
+          // 次の月を計算
+          const nextMonth = getNextMonth(data.latestMonth);
+          setSelectedMonth(nextMonth);
+        } else {
+          // レコードがない場合は現在月
+          const now = new Date();
+          setSelectedMonth(now.toISOString().slice(0, 7));
+        }
+      } catch (error) {
+        console.error("Error loading latest month:", error);
+        // エラー時は現在月
+        const now = new Date();
+        setSelectedMonth(now.toISOString().slice(0, 7));
+      }
+    },
+    [getNextMonth]
+  );
+
+  // Initialize with next month after latest bill run
+  useEffect(() => {
+    if (property && isOpen) {
+      loadLatestMonth(property.property_id);
+    }
+  }, [property, isOpen, loadLatestMonth]);
+
+  const loadBillLines = useCallback(
+    async (propertyId: string) => {
+      try {
+        setIsLoading(true);
+        setMessage("");
+
+        const data = await api.getBillLineData(propertyId);
+        console.log("Bill lines data:", data);
+
+        // Filter by selected month
+        const filteredBillLines = data.billLines.filter((line: BillLine) => {
+          const lineMonth = line.bill_run.month_start.slice(0, 7); // YYYY-MM format
+          return lineMonth === selectedMonth;
+        });
+
+        setBillLines(filteredBillLines);
+      } catch (error) {
+        console.error("Error loading bill lines:", error);
+        setMessage("Error loading bill data");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [selectedMonth]
+  );
+
+  const loadUtilityActuals = useCallback(
+    async (propertyId: string) => {
+      try {
+        const data = await api.getBootstrap(propertyId, selectedMonth + "-01");
+        const utilityActuals = data.utilityActuals || [];
+
+        // Initialize utility amounts from existing data
+        const amounts: Record<string, string> = {};
+        utilityActuals.forEach((actual: UtilityActual) => {
+          amounts[actual.utility] = actual.amount.toString();
+        });
+        setUtilityAmounts(amounts);
+      } catch (error) {
+        console.error("Error loading utility actuals:", error);
+      }
+    },
+    [selectedMonth]
+  );
 
   useEffect(() => {
     if (property && selectedMonth) {
       loadBillLines(property.property_id);
       loadUtilityActuals(property.property_id);
     }
-  }, [property, selectedMonth]);
+  }, [property, selectedMonth, loadBillLines, loadUtilityActuals]);
 
   // クリーンアップ処理
   useEffect(() => {
@@ -96,45 +183,6 @@ export default function CalculateModal({
       Object.values(debounceTimers).forEach((timer) => clearTimeout(timer));
     };
   }, [debounceTimers]);
-
-  const loadBillLines = async (propertyId: string) => {
-    try {
-      setIsLoading(true);
-      setMessage("");
-
-      const data = await api.getBillLineData(propertyId);
-      console.log("Bill lines data:", data);
-
-      // Filter by selected month
-      const filteredBillLines = data.billLines.filter((line: BillLine) => {
-        const lineMonth = line.bill_run.month_start.slice(0, 7); // YYYY-MM format
-        return lineMonth === selectedMonth;
-      });
-
-      setBillLines(filteredBillLines);
-    } catch (error) {
-      console.error("Error loading bill lines:", error);
-      setMessage("Error loading bill data");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadUtilityActuals = async (propertyId: string) => {
-    try {
-      const data = await api.getBootstrap(propertyId, selectedMonth + "-01");
-      const utilityActuals = data.utilityActuals || [];
-
-      // Initialize utility amounts from existing data
-      const amounts: Record<string, string> = {};
-      utilityActuals.forEach((actual: UtilityActual) => {
-        amounts[actual.utility] = actual.amount.toString();
-      });
-      setUtilityAmounts(amounts);
-    } catch (error) {
-      console.error("Error loading utility actuals:", error);
-    }
-  };
 
   // Input validation functions
   const validateUtilityAmount = (amount: string): boolean => {
