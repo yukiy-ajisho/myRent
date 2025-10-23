@@ -3136,6 +3136,72 @@ app.get("/tenant-running-balance", async (req, res) => {
   }
 });
 
+// GET /owner-tenant/:tenantId - ニックネーム取得
+app.get("/owner-tenant/:tenantId", async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const ownerId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${ownerId} requesting nickname for tenant ${tenantId}`
+    );
+
+    const { data: ownerTenant, error } = await supabase
+      .from("owner_tenant")
+      .select("nick_name")
+      .eq("owner_id", ownerId)
+      .eq("tenant_id", tenantId)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      console.error("Error fetching nickname:", error);
+      throw error;
+    }
+
+    res.json({ nick_name: ownerTenant?.nick_name || null });
+  } catch (error) {
+    console.error("Nickname fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch nickname" });
+  }
+});
+
+// POST /owner-tenant - ニックネーム保存/更新
+app.post("/owner-tenant", async (req, res) => {
+  try {
+    const { tenant_id, nick_name } = req.body;
+    const owner_id = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${owner_id} saving nickname for tenant ${tenant_id}: ${nick_name}`
+    );
+
+    const { data, error } = await supabase
+      .from("owner_tenant")
+      .upsert(
+        {
+          owner_id,
+          tenant_id,
+          nick_name: nick_name || null,
+        },
+        {
+          onConflict: "owner_id,tenant_id",
+        }
+      )
+      .select("nick_name")
+      .single();
+
+    if (error) {
+      console.error("Error saving nickname:", error);
+      throw error;
+    }
+
+    res.json({ nick_name: data.nick_name });
+  } catch (error) {
+    console.error("Nickname save error:", error);
+    res.status(500).json({ error: "Failed to save nickname" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });

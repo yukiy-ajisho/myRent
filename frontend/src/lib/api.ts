@@ -308,4 +308,17 @@ export const api = {
   getTenantRunningBalance: () => {
     return apiRequest("/tenant-running-balance");
   },
+
+  // Get nickname for a tenant
+  getNickname: (tenantId: string) => {
+    return apiRequest(`/owner-tenant/${tenantId}`);
+  },
+
+  // Save nickname for a tenant
+  saveNickname: (data: { tenant_id: string; nick_name: string }) => {
+    return apiRequest("/owner-tenant", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };

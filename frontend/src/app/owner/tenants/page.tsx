@@ -12,6 +12,7 @@ interface Tenant {
   personal_multiplier: number;
   property_id: string;
   property_name: string;
+  nick_name?: string | null;
 }
 
 interface GroupedTenant {
@@ -20,6 +21,7 @@ interface GroupedTenant {
   email: string;
   user_type: string;
   personal_multiplier: number;
+  nick_name?: string | null;
   properties: {
     property_id: string;
     property_name: string;
@@ -44,6 +46,19 @@ export default function Tenants() {
     propertyId: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ニックネームモーダルの状態
+  const [nicknameModal, setNicknameModal] = useState<{
+    isOpen: boolean;
+    tenantId: string | null;
+    currentNickname: string;
+    newNickname: string;
+  }>({
+    isOpen: false,
+    tenantId: null,
+    currentNickname: "",
+    newNickname: "",
+  });
 
   // 初期データ読み込み
   useEffect(() => {
@@ -173,6 +188,62 @@ export default function Tenants() {
     setAddedTenantName("");
   };
 
+  // ニックネーム更新ボタンのハンドラー
+  const handleUpdateNickname = async (tenantId: string) => {
+    try {
+      const response = await api.getNickname(tenantId);
+      setNicknameModal({
+        isOpen: true,
+        tenantId,
+        currentNickname: response.nick_name || "",
+        newNickname: response.nick_name || "",
+      });
+    } catch (error) {
+      console.error("Failed to fetch nickname:", error);
+      setMessage("Failed to load nickname");
+    }
+  };
+
+  // ニックネーム保存のハンドラー
+  const handleSaveNickname = async () => {
+    if (!nicknameModal.tenantId) return;
+
+    try {
+      await api.saveNickname({
+        tenant_id: nicknameModal.tenantId,
+        nick_name: nicknameModal.newNickname,
+      });
+
+      // ローカル状態を更新
+      setAllTenants((prev) =>
+        prev.map((tenant) =>
+          tenant.user_id === nicknameModal.tenantId
+            ? { ...tenant, nick_name: nicknameModal.newNickname }
+            : tenant
+        )
+      );
+
+      setNicknameModal({
+        isOpen: false,
+        tenantId: null,
+        currentNickname: "",
+        newNickname: "",
+      });
+    } catch (error) {
+      console.error("Failed to save nickname:", error);
+      setMessage("Failed to save nickname");
+    }
+  };
+
+  // ニックネームモーダルキャンセルのハンドラー
+  const handleCancelNickname = () => {
+    setNicknameModal((prev) => ({
+      ...prev,
+      isOpen: false,
+      newNickname: prev.currentNickname,
+    }));
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -236,9 +307,22 @@ export default function Tenants() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {tenant.name}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {tenant.name}
+                          {tenant.nick_name && (
+                            <span className="text-sm text-gray-500 ml-2">
+                              ({tenant.nick_name})
+                            </span>
+                          )}
+                        </h3>
+                        <button
+                          onClick={() => handleUpdateNickname(tenant.user_id)}
+                          className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                        >
+                          Update Nick Name
+                        </button>
+                      </div>
                       <p className="text-gray-600 mt-1">{tenant.email}</p>
                       <div className="mt-2 flex gap-2 flex-wrap">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -398,6 +482,44 @@ export default function Tenants() {
                 </form>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ニックネームモーダル */}
+      {nicknameModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Update Nick Name</h2>
+            <input
+              type="text"
+              value={nicknameModal.newNickname}
+              onChange={(e) =>
+                setNicknameModal((prev) => ({
+                  ...prev,
+                  newNickname: e.target.value,
+                }))
+              }
+              placeholder="Enter nickname"
+              className="w-full p-2 border rounded mb-4"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveNickname}
+                disabled={
+                  nicknameModal.newNickname === nicknameModal.currentNickname
+                }
+                className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
+              <button
+                onClick={handleCancelNickname}
+                className="px-4 py-2 bg-gray-500 text-white rounded"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
