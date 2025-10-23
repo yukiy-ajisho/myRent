@@ -59,6 +59,9 @@ export default function Properties() {
   // Calculate管理モーダル関連
   const [calculateModalOpen, setCalculateModalOpen] = useState(false);
 
+  // Bill runs管理
+  const [billRuns, setBillRuns] = useState<Record<string, { month_start: string; bill_run_id: number; status: string }[]>>({});
+
   // プロパティ作成フォーム関連の状態
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -67,42 +70,70 @@ export default function Properties() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadProperties = useCallback(async () => {
+  // CalculateModalと同じgetNextMonth関数
+  const getNextMonth = useCallback((monthString: string) => {
+    // monthString is already in YYYY-MM-DD format, so we can use it directly
+    console.log("getNextMonth input:", monthString);
+
+    // Parse the date string to avoid timezone issues
+    const [year, month] = monthString.split("-").map(Number);
+    console.log("getNextMonth parsed year:", year, "month:", month);
+
+    // Create date object using local timezone
+    const date = new Date(year, month - 1, 1); // month is 0-indexed
+    console.log("getNextMonth parsed date:", date);
+
+    const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    console.log("getNextMonth next month:", nextMonth);
+    const result = nextMonth.toISOString().slice(0, 7); // YYYY-MM format
+    console.log("getNextMonth result:", result);
+    return result;
+  }, []);
+
+  const loadBillRuns = useCallback(async (propertyId: string) => {
     try {
-      setIsLoading(true);
-      setMessage("");
-
-      console.log("=== PROPERTIES DEBUG ===");
-      console.log("Loading properties...");
-
-      const data = await api.getProperties();
-      console.log("API Response received:", data);
-
-      // データの検証
-      if (!data.properties || !Array.isArray(data.properties)) {
-        throw new Error("Invalid data format");
-      }
-
-      setProperties(data.properties);
-      console.log("Properties loaded:", data.properties.length);
-
-      // 各プロパティの家賃データを取得
-      for (const property of data.properties) {
-        await loadRentData(property.property_id);
-      }
+      const data = await api.getBillRuns(propertyId);
+      setBillRuns((prev) => ({
+        ...prev,
+        [propertyId]: data.billRuns || [],
+      }));
     } catch (error) {
-      console.error("Error loading properties:", error);
-      setMessage("Error loading properties");
-    } finally {
-      setIsLoading(false);
+      console.error(`Error loading bill runs for property ${propertyId}:`, error);
     }
   }, []);
 
-  useEffect(() => {
-    loadProperties();
-  }, [loadProperties]);
+  // 次の月を計算する関数（CalculateModalと同じロジック）
+  const getNextMonthForProperty = useCallback((propertyId: string) => {
+    const propertyBillRuns = billRuns[propertyId] || [];
+    
+    if (propertyBillRuns.length === 0) {
+      // bill_runレコードが存在しない場合、現在の月を返す
+      const now = new Date();
+      const currentMonth = now.toISOString().slice(0, 7); // YYYY-MM format
+      return currentMonth;
+    }
 
-  const loadRentData = async (propertyId: string) => {
+    // 最新のbill_runの月を取得
+    const latestBillRun = propertyBillRuns.reduce((latest, current) => {
+      return new Date(current.month_start) > new Date(latest.month_start) ? current : latest;
+    });
+
+    // 次の月を計算
+    return getNextMonth(latestBillRun.month_start);
+  }, [billRuns, getNextMonth]);
+
+  // 月を表示用にフォーマットする関数
+  const formatMonthDisplay = useCallback((monthString: string) => {
+    const [year, month] = monthString.split("-");
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const monthIndex = parseInt(month) - 1;
+    return `${monthNames[monthIndex]} ${year}`;
+  }, []);
+
+  const loadRentData = useCallback(async (propertyId: string) => {
     try {
       const data = await api.getRentData(propertyId);
 
@@ -134,7 +165,43 @@ export default function Properties() {
         error
       );
     }
-  };
+  }, []);
+
+  const loadProperties = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setMessage("");
+
+      console.log("=== PROPERTIES DEBUG ===");
+      console.log("Loading properties...");
+
+      const data = await api.getProperties();
+      console.log("API Response received:", data);
+
+      // データの検証
+      if (!data.properties || !Array.isArray(data.properties)) {
+        throw new Error("Invalid data format");
+      }
+
+      setProperties(data.properties);
+      console.log("Properties loaded:", data.properties.length);
+
+      // 各プロパティの家賃データとbill runsを取得
+      for (const property of data.properties) {
+        await loadRentData(property.property_id);
+        await loadBillRuns(property.property_id);
+      }
+    } catch (error) {
+      console.error("Error loading properties:", error);
+      setMessage("Error loading properties");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadRentData, loadBillRuns]);
+
+  useEffect(() => {
+    loadProperties();
+  }, [loadProperties]);
 
   // デバウンス付きの保存関数
   const debouncedSave = useCallback(
@@ -354,12 +421,17 @@ export default function Properties() {
                           >
                             Division Methods
                           </button>
-                          <button
-                            onClick={() => handleCalculateClick(property)}
-                            className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
-                          >
-                            Calculate
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleCalculateClick(property)}
+                              className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
+                            >
+                              Calculate
+                            </button>
+                            <span className="text-xs text-gray-600">
+                              {formatMonthDisplay(getNextMonthForProperty(property.property_id))}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div className="mt-3">
