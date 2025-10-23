@@ -223,10 +223,10 @@ export default function Tenants() {
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-96">
-            <h2 className="text-xl font-bold mb-4">Add Existing Tenant</h2>
+            <h2 className="text-xl font-bold mb-4">Add Tenant</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Search for an existing tenant by name and email address. If found,
-              they will be added to the selected property.
+              Search for a tenant by email address. If found, they will be added
+              to the selected property.
             </p>
 
             <form onSubmit={handleSubmit}>
