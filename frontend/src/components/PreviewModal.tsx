@@ -4,6 +4,12 @@ import { useState, useEffect } from "react";
 import { X, CheckCircle } from "lucide-react";
 import { api } from "@/lib/api";
 
+const DIVISION_METHOD_LABELS = {
+  fixed: "Fixed",
+  equalshare: "Headcounts",
+  bydays: "Days Percent",
+};
+
 interface PreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -246,11 +252,14 @@ export default function PreviewModal({
                         >
                           <div className="flex items-center space-x-3">
                             <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
-                              {billLine.utility}
+                              {billLine.utility.charAt(0).toUpperCase() +
+                                billLine.utility.slice(1)}
                             </span>
                             {billLine.detail_json && (
                               <span className="text-sm text-gray-600">
-                                {billLine.detail_json.method}
+                                {DIVISION_METHOD_LABELS[
+                                  billLine.detail_json.method
+                                ] || billLine.detail_json.method}
                               </span>
                             )}
                           </div>
