@@ -19,10 +19,18 @@ interface DivisionRule {
 
 const UTILITIES = ["electricity", "gas", "water", "internet", "garbage"];
 const DIVISION_METHODS = [
-  { value: "", label: "Select Method" },
-  { value: "fixed", label: "Fixed" },
-  { value: "equalshare", label: "Headcounts" },
-  { value: "bydays", label: "Days Precent" },
+  { value: "", label: "Select Method", description: "" },
+  { value: "fixed", label: "Fixed", description: "Split by fixed amount" },
+  {
+    value: "equalshare",
+    label: "Headcounts",
+    description: "Split equally by number of people",
+  },
+  {
+    value: "bydays",
+    label: "Days Precent",
+    description: "Split by percentage of days stayed",
+  },
 ];
 
 interface DivisionMethodsModalProps {
@@ -174,9 +182,21 @@ export default function DivisionMethodsModal({
                         ).map((method) => (
                           <th
                             key={method.value}
-                            className="text-center py-3 px-4 font-medium text-gray-700"
+                            className="text-center py-3 px-4 font-medium text-gray-700 relative"
                           >
-                            {method.label}
+                            <span>{method.label}</span>
+                            {method.description && (
+                              <div className="absolute top-1 right-1">
+                                <div className="relative group">
+                                  <span className="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 hover:bg-gray-400 hover:text-gray-700 cursor-help">
+                                    ?
+                                  </span>
+                                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                                    {method.description}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </th>
                         ))}
                       </tr>
