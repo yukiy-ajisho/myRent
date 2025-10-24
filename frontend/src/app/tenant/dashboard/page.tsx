@@ -54,12 +54,20 @@ export default function TenantDashboard() {
     };
 
     checkAuthAndFetchData();
+
+    // Cleanup function to clear state on unmount
+    return () => {
+      setProperties([]);
+      setError(null);
+      setIsLoading(false);
+    };
   }, [router]);
 
   const fetchTenantProperties = async () => {
     try {
       setIsLoading(true);
       setError(null);
+      setProperties([]); // Clear old data first to prevent duplicates
 
       console.log("Fetching tenant properties...");
       const response = await api.getTenantProperties();
