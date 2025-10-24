@@ -19,12 +19,10 @@ interface DashboardTenant {
 }
 
 export default function Dashboard() {
-  const { userProperties } = useProperty();
+  const { userProperties, selectedProperty, setSelectedProperty } =
+    useProperty();
   const [allDashboardData, setAllDashboardData] = useState<DashboardTenant[]>(
     []
-  );
-  const [selectedProperty, setSelectedProperty] = useState<Property | null>(
-    null
   );
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -211,10 +209,13 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-              <div className="grid grid-cols-4 gap-0">
+              <div className="grid grid-cols-5 gap-0">
                 {/* ヘッダー行 */}
                 <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
                   Name
+                </div>
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+                  Property
                 </div>
                 <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
                   Email
@@ -222,7 +223,7 @@ export default function Dashboard() {
                 <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20">
                   Last Updated
                 </div>
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-60">
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-40">
                   Balance
                 </div>
 
@@ -235,6 +236,9 @@ export default function Dashboard() {
                     <div className="text-lg font-semibold text-gray-900 py-3">
                       {tenant.nick_name || tenant.name}
                     </div>
+                    <div className="text-gray-600 py-3">
+                      {tenant.property_name}
+                    </div>
                     <div className="text-gray-600 py-3 pl-15">
                       {tenant.email}
                     </div>
@@ -242,7 +246,7 @@ export default function Dashboard() {
                       {formatDate(tenant.last_updated)}
                     </div>
                     <div
-                      className={`text-2xl font-bold py-3 pl-60 ${getBalanceColor(
+                      className={`text-2xl font-bold py-3 pl-40 ${getBalanceColor(
                         tenant.current_balance
                       )}`}
                     >

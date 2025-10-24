@@ -31,11 +31,9 @@ interface GroupedTenant {
 }
 
 export default function Tenants() {
-  const { userProperties } = useProperty();
+  const { userProperties, selectedProperty, setSelectedProperty } =
+    useProperty();
   const [allTenants, setAllTenants] = useState<Tenant[]>([]);
-  const [selectedProperty, setSelectedProperty] = useState<Property | null>(
-    null
-  );
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -255,41 +253,35 @@ export default function Tenants() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">
-          Tenants{selectedProperty ? ` for ${selectedProperty.name}` : ""}
-        </h1>
-
-        <div className="flex items-center gap-4">
-          {/* プロパティ選択ドロップダウン */}
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="property-select"
-              className="text-sm font-medium text-gray-700"
-            >
-              Property:
-            </label>
-            <select
-              id="property-select"
-              value={selectedProperty?.property_id || ""}
-              onChange={handlePropertyChange}
-              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">All Properties</option>
-              {userProperties.map((property) => (
-                <option key={property.property_id} value={property.property_id}>
-                  {property.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        {/* プロパティ選択ドロップダウン */}
+        <div className="flex items-center gap-2">
+          <label
+            htmlFor="property-select"
+            className="text-sm font-medium text-gray-700"
           >
-            Add Tenant
-          </button>
+            Property:
+          </label>
+          <select
+            id="property-select"
+            value={selectedProperty?.property_id || ""}
+            onChange={handlePropertyChange}
+            className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">All Properties</option>
+            {userProperties.map((property) => (
+              <option key={property.property_id} value={property.property_id}>
+                {property.name}
+              </option>
+            ))}
+          </select>
         </div>
+
+        <button
+          onClick={() => setShowForm(true)}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Add Tenant
+        </button>
       </div>
 
       {isLoading ? (
