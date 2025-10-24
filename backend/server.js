@@ -2183,21 +2183,23 @@ async function calculateBills(
   let totalRent = 0;
   let totalUtilities = 0;
 
-  // Process rent
+  // Process rent - only for tenants with stay days
   tenantRents.forEach((rent) => {
-    // Fixed method - assign full monthly rent to each user
-    billLines.push({
-      bill_run_id: billRun.bill_run_id,
-      user_id: rent.user_id,
-      utility: "rent",
-      amount: rent.monthly_rent,
-      detail_json: {
-        method: "fixed",
-        monthly_rent: rent.monthly_rent,
-      },
-    });
+    // Only assign rent to tenants who have stay days (start date exists)
+    if (userDays[rent.user_id] && userDays[rent.user_id] > 0) {
+      billLines.push({
+        bill_run_id: billRun.bill_run_id,
+        user_id: rent.user_id,
+        utility: "rent",
+        amount: rent.monthly_rent,
+        detail_json: {
+          method: "fixed",
+          monthly_rent: rent.monthly_rent,
+        },
+      });
 
-    totalRent += rent.monthly_rent;
+      totalRent += rent.monthly_rent;
+    }
   });
 
   // Process utilities
