@@ -241,9 +241,9 @@ export default function History() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6">
         {/* タブボタン */}
-        <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+        <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-4 w-fit">
           <button
             onClick={() => setActiveTab("payment")}
             className={`px-4 py-2 rounded-md font-medium transition-colors ${
@@ -306,11 +306,10 @@ export default function History() {
                 style={{
                   marginBottom: "20px",
                   padding: "15px",
-                  border: "1px solid #ddd",
                   borderRadius: "8px",
                 }}
               >
-                <h3 style={{ marginBottom: "15px" }}>Filters</h3>
+                <h3 style={{ marginBottom: "15px" }}></h3>
                 <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
                   {/* Year Filter */}
                   <div>
