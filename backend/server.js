@@ -2220,6 +2220,73 @@ async function calculateBills(
     0
   );
 
+  // Calculate rent days for each user (without break periods)
+  console.log("=== DEBUG: Calculating rent days (without break periods) ===");
+  console.log("propertyUsers count:", propertyUsers.length);
+  propertyUsers.forEach((user) => {
+    console.log(`propertyUser: ${user.user_id}, name: ${user.name}`);
+  });
+
+  const rentDays = {};
+
+  for (const user of propertyUsers) {
+    console.log(
+      `\n--- Processing user ${user.user_id} for rent calculation ---`
+    );
+    const stayRecord = stayRecords.find((sr) => sr.user_id === user.user_id);
+    if (!stayRecord) {
+      console.log(`No stay record found for user ${user.user_id}`);
+      rentDays[user.user_id] = 0;
+      continue;
+    }
+
+    console.log(
+      `Stay record found: start_date=${stayRecord.start_date}, end_date=${stayRecord.end_date}`
+    );
+
+    // Calculate actual stay period for this month (same as current logic)
+    const entryDate = new Date(stayRecord.start_date);
+    let exitDate;
+
+    console.log(`Entry date: ${entryDate.toISOString()}`);
+    console.log(`Month start (ms): ${ms.toISOString()}`);
+    console.log(`Month end: ${monthEnd.toISOString()}`);
+
+    if (
+      !stayRecord.end_date ||
+      isNaN(new Date(stayRecord.end_date).getTime())
+    ) {
+      exitDate = new Date(monthEnd);
+      console.log(`No end date, using month end: ${exitDate.toISOString()}`);
+    } else {
+      exitDate = new Date(stayRecord.end_date);
+      console.log(`Exit date: ${exitDate.toISOString()}`);
+    }
+
+    // Calculate overlap with the billing month
+    const actualStart = new Date(Math.max(entryDate, ms));
+    const actualEnd = new Date(Math.min(exitDate, monthEnd));
+
+    console.log(`Actual start: ${actualStart.toISOString()}`);
+    console.log(`Actual end: ${actualEnd.toISOString()}`);
+
+    // Calculate days present WITHOUT subtracting break days
+    const daysPresent = Math.max(
+      0,
+      Math.ceil((actualEnd - actualStart) / (1000 * 60 * 60 * 24)) + 1
+    );
+
+    console.log(
+      `Days calculation: (${actualEnd.getTime()} - ${actualStart.getTime()}) / (1000 * 60 * 60 * 24) + 1 = ${daysPresent}`
+    );
+
+    rentDays[user.user_id] = daysPresent;
+
+    console.log(
+      `Rent days for user ${user.user_id}: ${daysPresent} (break periods NOT subtracted)`
+    );
+  }
+
   // Get division rules
   console.log("=== DEBUG: Getting division rules ===");
   const { data: divisionRules, error: rulesError } = await supabase
@@ -2260,22 +2327,72 @@ async function calculateBills(
   let totalRent = 0;
   let totalUtilities = 0;
 
-  // Process rent - only for tenants with stay days
+  // Process rent - proportional to stay days (without break periods)
+  console.log("=== DEBUG: Processing rent with new proportional logic ===");
+  console.log("rentDays object:", rentDays);
+  console.log("tenantRents count:", tenantRents.length);
+
   tenantRents.forEach((rent) => {
-    // Only assign rent to tenants who have stay days (start date exists)
-    if (userDays[rent.user_id] && userDays[rent.user_id] > 0) {
+    console.log(`\n--- Processing rent for user ${rent.user_id} ---`);
+    console.log(`Monthly rent: ${rent.monthly_rent}`);
+    console.log(`rentDays[${rent.user_id}]: ${rentDays[rent.user_id]}`);
+
+    if (rentDays[rent.user_id] && rentDays[rent.user_id] > 0) {
+      // 正しい月の日数計算
+      const year = ms.getFullYear();
+      const month = ms.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      console.log(
+        `Year: ${year}, Month: ${month} (0-based), Days in month: ${daysInMonth}`
+      );
+      console.log(
+        `ms.getMonth() = ${ms.getMonth()}, should be 10 for November`
+      );
+      const stayDays = rentDays[rent.user_id];
+
+      console.log(`Days in month: ${daysInMonth}`);
+      console.log(`Stay days: ${stayDays}`);
+
+      // Calculate rent - full amount if staying full month, proportional otherwise
+      let proportionalRent;
+      if (stayDays === daysInMonth) {
+        // Full month - use full rent amount
+        proportionalRent = rent.monthly_rent;
+        console.log(`Full month stay - using full rent: ${proportionalRent}`);
+      } else {
+        // Partial month - calculate proportional rent
+        proportionalRent =
+          Math.round((rent.monthly_rent / daysInMonth) * stayDays * 100) / 100;
+        console.log(
+          `Partial month - calculation: (${rent.monthly_rent} / ${daysInMonth}) * ${stayDays} = ${proportionalRent}`
+        );
+      }
+
+      console.log(
+        `User ${rent.user_id}: monthly_rent=${rent.monthly_rent}, days_in_month=${daysInMonth}, stay_days=${stayDays}, proportional_rent=${proportionalRent}`
+      );
+
       billLines.push({
         bill_run_id: billRun.bill_run_id,
         user_id: rent.user_id,
         utility: "rent",
-        amount: rent.monthly_rent,
+        amount: proportionalRent,
         detail_json: {
-          method: "fixed",
+          method: "bydays",
           monthly_rent: rent.monthly_rent,
+          days_in_month: daysInMonth,
+          stay_days: stayDays,
+          proportional_amount: proportionalRent,
         },
       });
 
-      totalRent += rent.monthly_rent;
+      totalRent += proportionalRent;
+      console.log(`Added to billLines: ${proportionalRent}`);
+    } else {
+      console.log(
+        `Skipping rent for user ${rent.user_id} - no stay days or rentDays is 0`
+      );
     }
   });
 
