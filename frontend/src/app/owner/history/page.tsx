@@ -421,18 +421,6 @@ export default function History() {
                 </div>
               </div>
 
-              {/* Results Count */}
-              <div
-                style={{
-                  marginBottom: "15px",
-                  fontSize: "14px",
-                  color: "#666",
-                }}
-              >
-                Showing {filteredBillLines.length} of {sortedBillLines.length}{" "}
-                records
-              </div>
-
               {/* Bill Lines List */}
               {filteredBillLines.map((billLine) => (
                 <div
@@ -463,6 +451,18 @@ export default function History() {
                   </div>
                 </div>
               ))}
+
+              {/* Results Count - 一番下に表示 */}
+              <div
+                style={{
+                  marginTop: "15px",
+                  fontSize: "14px",
+                  color: "#666",
+                }}
+              >
+                Showing {filteredBillLines.length} of {sortedBillLines.length}{" "}
+                records
+              </div>
             </div>
           )}
         </div>
