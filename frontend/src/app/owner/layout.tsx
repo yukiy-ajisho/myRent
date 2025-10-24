@@ -79,6 +79,12 @@ function PropertySelector() {
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
+  // 現在のページに応じたタイトルを取得
+  const getPageTitle = () => {
+    const currentItem = navigationItems.find((item) => item.href === pathname);
+    return currentItem ? currentItem.label : "Overview";
+  };
+
   return (
     <div className="h-screen flex bg-gray-50">
       {/* ナビゲーションバー（左側270px固定、スライドアウト効果） */}
@@ -163,7 +169,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           style={{ paddingLeft: "30px" }}
         >
           <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-gray-900">Overview</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {getPageTitle()}
+            </h1>
           </div>
 
           {/* ユーザーアバター・名前（右上） */}
