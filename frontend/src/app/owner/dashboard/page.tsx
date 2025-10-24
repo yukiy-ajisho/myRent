@@ -218,33 +218,20 @@ export default function Dashboard() {
                     tenant.current_balance
                   )}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {tenant.nick_name || tenant.name}
-                      </h3>
-                      <p className="text-gray-600 mt-1">{tenant.email}</p>
-                      <div className="mt-2">
-                        <span className="text-sm text-gray-500">
-                          Last updated: {formatDate(tenant.last_updated)}
-                        </span>
-                      </div>
+                  <div className="grid grid-cols-4 gap-0">
+                    <div className="text-lg font-semibold text-gray-900">
+                      {tenant.nick_name || tenant.name}
                     </div>
-                    <div className="ml-4 text-right">
-                      <div
-                        className={`text-2xl font-bold ${getBalanceColor(
-                          tenant.current_balance
-                        )}`}
-                      >
-                        {formatCurrency(tenant.current_balance)}
-                      </div>
-                      <div className="text-sm text-gray-500 mt-1">
-                        {tenant.current_balance > 0
-                          ? "Credit Balance"
-                          : tenant.current_balance < 0
-                          ? "Outstanding Balance"
-                          : "No Balance"}
-                      </div>
+                    <div className="text-gray-600 pl-15">{tenant.email}</div>
+                    <div className="text-sm text-gray-500 pl-20">
+                      Last updated: {formatDate(tenant.last_updated)}
+                    </div>
+                    <div
+                      className={`text-2xl font-bold text-right ${getBalanceColor(
+                        tenant.current_balance
+                      )}`}
+                    >
+                      {formatCurrency(tenant.current_balance)}
                     </div>
                   </div>
                 </div>
