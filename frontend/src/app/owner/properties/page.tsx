@@ -517,7 +517,7 @@ export default function Properties() {
                       </div>
                       <div className="mt-3">
                         {/* 特殊なヘッダーカード */}
-                        <div className="grid grid-cols-[1fr_1.2fr_1fr_1fr] gap-0 bg-white px-3 py-2 rounded mb-2">
+                        <div className="grid grid-cols-[1.1fr_1.5fr_1.2fr_0.7fr] gap-0 bg-white px-3 py-2 rounded mb-2">
                           {/* 1. Tenant: */}
                           <div className="text-left">
                             <span className="text-sm font-medium text-gray-700">
@@ -530,22 +530,20 @@ export default function Properties() {
 
                           {/* 2. Commencement Date + Expiration Date */}
                           <div className="text-left">
-                            <div className="grid grid-cols-3 gap-0">
+                            <div className="grid grid-cols-[1.2fr_1fr_0.5fr_1.8fr] gap-0 bg-white px-3 py-2 rounded mb-2">
                               <span className="text-xs text-gray-500">
                                 Commencement
                               </span>
                               <span className="text-xs text-gray-500">
                                 Expiration
                               </span>
-                              <span className="text-xs text-gray-500">
-                                
-                              </span>
+                              <span className="text-xs text-gray-500"></span>
                             </div>
                           </div>
 
                           {/* 3. Pause Utility */}
                           <div className="text-left">
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-500 pl-8">
                               Pause Utility
                             </span>
                           </div>
@@ -566,7 +564,7 @@ export default function Properties() {
                                 return (
                                   <div
                                     key={tenant.user_id}
-                                    className="grid grid-cols-[1fr_1.2fr_1fr_1fr] gap-0 bg-gray-50 px-3 py-2 rounded"
+                                    className="grid grid-cols-[1.1fr_1.5fr_1.2fr_0.7fr] gap-0 bg-gray-50 px-3 py-2 rounded"
                                   >
                                     {/* 1. Name + Email */}
                                     <div className="text-left">
@@ -580,7 +578,7 @@ export default function Properties() {
 
                                     {/* 2. Start Date + End Date + Edit */}
                                     <div className="text-left">
-                                      <div className="grid grid-cols-3 gap-0">
+                                      <div className="grid grid-cols-[1.2fr_1fr_0.5fr_1.8fr] gap-0 bg-gray-50 px-3 py-2 rounded">
                                         <span className="text-xs text-gray-600">
                                           {formatDate(
                                             stayPeriod?.start_date || null
@@ -607,6 +605,7 @@ export default function Properties() {
 
                                     {/* 3. Edit Button */}
                                     <div className="text-left">
+                                      <div className="pl-8">
                                       <button
                                         onClick={() =>
                                           handleBreakClick(tenant, property)
@@ -615,6 +614,7 @@ export default function Properties() {
                                       >
                                         Edit
                                       </button>
+                                      </div>
                                     </div>
 
                                     {/* 4. Rent Input */}
