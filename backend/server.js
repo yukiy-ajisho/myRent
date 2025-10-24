@@ -887,7 +887,7 @@ app.post("/payments/:paymentId/accept", async (req, res) => {
     // 新しい累積残高を計算
     const currentBalance =
       currentLedger?.length > 0 ? currentLedger[0].amount : 0;
-    const newBalance = currentBalance + payment.amount;
+    const newBalance = currentBalance - payment.amount;
 
     console.log("Current balance:", currentBalance);
     console.log("Payment amount:", payment.amount);
@@ -2720,7 +2720,7 @@ async function calculateBills(
       currentLedger && currentLedger.length > 0 ? currentLedger[0].amount : 0;
 
     // Calculate new cumulative balance
-    const newBalance = currentBalance + -total; // Negative because it's a bill
+    const newBalance = currentBalance + total; // Positive because it's a bill
 
     console.log(
       `User ${user_id}: current=${currentBalance}, bill=${total}, new=${newBalance}`
