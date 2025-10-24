@@ -60,7 +60,10 @@ export default function PreviewModal({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+    // Parse the date string and create a local date to avoid timezone issues
+    const [year, month] = dateString.split("-");
+    const localDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return localDate.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
     });
