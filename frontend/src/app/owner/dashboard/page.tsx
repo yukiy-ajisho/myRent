@@ -11,6 +11,7 @@ interface DashboardTenant {
   user_id: string;
   name: string;
   email: string;
+  nick_name?: string | null;
   current_balance: number;
   last_updated: string | null;
   property_id: string;
@@ -220,7 +221,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900">
-                        {tenant.name}
+                        {tenant.nick_name || tenant.name}
                       </h3>
                       <p className="text-gray-600 mt-1">{tenant.email}</p>
                       <div className="mt-2">

@@ -75,6 +75,10 @@ export default function Tenants() {
 
       const data = await api.getAllRentData();
       console.log("API Response received:", data);
+      console.log(
+        "Tenants with nicknames:",
+        data.tenants?.map((t) => ({ name: t.name, nick_name: t.nick_name }))
+      );
 
       const tenants = data.tenants || [];
       console.log("All tenants from API:", tenants);
@@ -112,6 +116,7 @@ export default function Tenants() {
           email: tenant.email,
           user_type: tenant.user_type,
           personal_multiplier: tenant.personal_multiplier,
+          nick_name: tenant.nick_name,
           properties: [],
         };
       }
@@ -309,10 +314,10 @@ export default function Tenants() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {tenant.name}
+                          {tenant.nick_name || tenant.name}
                           {tenant.nick_name && (
                             <span className="text-sm text-gray-500 ml-2">
-                              ({tenant.nick_name})
+                              ({tenant.name})
                             </span>
                           )}
                         </h3>

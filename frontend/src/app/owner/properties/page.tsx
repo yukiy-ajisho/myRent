@@ -27,6 +27,7 @@ interface Tenant {
   name: string;
   email: string;
   user_type: string;
+  nick_name?: string | null;
 }
 
 interface RentData {
@@ -554,7 +555,7 @@ export default function Properties() {
                                     <div className="flex-1 flex items-center gap-8">
                                       <div className="flex-1">
                                         <div className="text-sm font-medium text-gray-900">
-                                          {tenant.name}
+                                          {tenant.nick_name || tenant.name}
                                         </div>
                                         <div className="text-xs text-gray-500">
                                           {tenant.email}

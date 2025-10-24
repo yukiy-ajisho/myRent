@@ -13,6 +13,7 @@ interface BillLine {
   bill_run_id: string;
   app_user: {
     name: string;
+    nick_name?: string | null;
   };
   bill_run: {
     month_start: string;
@@ -31,6 +32,7 @@ interface Payment {
   app_user: {
     name: string;
     email: string;
+    nick_name?: string | null;
   };
   isAccepted: boolean;
   confirmedAt: string | null;
@@ -197,7 +199,11 @@ export default function History() {
 
   const uniqueNames = Array.from(
     new Set(
-      sortedBillLines.map((billLine) => billLine.app_user?.name).filter(Boolean)
+      sortedBillLines
+        .map(
+          (billLine) => billLine.app_user?.nick_name || billLine.app_user?.name
+        )
+        .filter(Boolean)
     )
   ).sort();
 
@@ -205,7 +211,7 @@ export default function History() {
   const filteredBillLines = sortedBillLines.filter((billLine) => {
     const year = billLine.bill_run?.month_start?.substring(0, 4);
     const month = billLine.bill_run?.month_start?.substring(5, 7);
-    const name = billLine.app_user?.name;
+    const name = billLine.app_user?.nick_name || billLine.app_user?.name;
 
     const yearMatch = !selectedYear || year === selectedYear;
     const monthMatch = !selectedMonth || month === selectedMonth;
@@ -437,7 +443,12 @@ export default function History() {
                     border: "1px solid #ccc",
                   }}
                 >
-                  <div>Tenant name: {billLine.app_user?.name || "Unknown"}</div>
+                  <div>
+                    Tenant name:{" "}
+                    {billLine.app_user?.nick_name ||
+                      billLine.app_user?.name ||
+                      "Unknown"}
+                  </div>
                   <div>Amount: ${billLine.amount.toLocaleString()}</div>
                   <div>
                     Utility:{" "}
@@ -487,7 +498,8 @@ export default function History() {
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <h3 className="text-lg font-semibold text-gray-900">
-                            {payment.app_user.name}
+                            {payment.app_user.nick_name ||
+                              payment.app_user.name}
                           </h3>
                           <p className="text-gray-600 mt-1">
                             {payment.app_user.email}

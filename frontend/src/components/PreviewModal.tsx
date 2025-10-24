@@ -47,6 +47,9 @@ export default function PreviewModal({
 }: PreviewModalProps) {
   const [isConfirming, setIsConfirming] = useState(false);
   const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [userNicknames, setUserNicknames] = useState<Record<string, string>>(
+    {}
+  );
   const [isLoadingUserNames, setIsLoadingUserNames] = useState(false);
 
   const handleConfirm = async () => {
@@ -75,13 +78,14 @@ export default function PreviewModal({
     });
   };
 
-  // Fetch user names for all unique user IDs
+  // Fetch user names and nicknames for all unique user IDs
   const fetchUserNames = async (userIds: string[]) => {
     setIsLoadingUserNames(true);
     try {
       const names: Record<string, string> = {};
+      const nicknames: Record<string, string> = {};
 
-      // Fetch user names in parallel
+      // Fetch user names and nicknames in parallel
       const promises = userIds.map(async (userId) => {
         try {
           console.log(`[DEBUG] Fetching user name for: ${userId}`);
@@ -106,10 +110,25 @@ export default function PreviewModal({
             names[userId] = `User ${userId.slice(0, 8)}`;
           }
         }
+
+        // Fetch nickname for this user
+        try {
+          console.log(`[DEBUG] Fetching nickname for: ${userId}`);
+          const nicknameResponse = await api.getNickname(userId);
+          console.log(
+            `[DEBUG] Nickname response for ${userId}:`,
+            nicknameResponse
+          );
+          nicknames[userId] = nicknameResponse.nick_name || null;
+        } catch (error: any) {
+          console.error(`Failed to fetch nickname for ${userId}:`, error);
+          nicknames[userId] = null;
+        }
       });
 
       await Promise.all(promises);
       setUserNames(names);
+      setUserNicknames(nicknames);
     } catch (error) {
       console.error("Error fetching user names:", error);
     } finally {
@@ -230,6 +249,7 @@ export default function PreviewModal({
                           Loading user name...
                         </div>
                       ) : (
+                        userNicknames[userData.user_id] ||
                         userNames[userData.user_id] ||
                         `User ${userData.user_id.slice(0, 8)}`
                       )}
