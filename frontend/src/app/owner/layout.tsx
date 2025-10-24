@@ -102,8 +102,17 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             <h1 className="text-xl font-bold text-gray-900">RentCalc</h1>
           </div>
 
-          {/* プロパティ選択ドロップダウン */}
-          <PropertySelector />
+          {/* プロパティ選択ドロップダウン - 現在は使用されていないためコメントアウト */}
+          {/* 
+            PropertySelector は以下の理由でコメントアウト:
+            1. 現在のサイドバーメニュー（Dashboard, Properties, Tenants, History）は
+               独自のプロパティ選択状態を持っているため不要
+            2. 使用されていないページ（Stay Manager, Rent Manager, Division Methods）は
+               サイドバーからアクセスできないため影響なし
+            3. 各ページで個別にプロパティ選択を実装しているため、
+               グローバルなプロパティ選択は冗長
+          */}
+          {/* <PropertySelector /> */}
         </div>
 
         {/* ナビゲーション項目 */}
