@@ -516,16 +516,38 @@ export default function Properties() {
                         </div>
                       </div>
                       <div className="mt-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-medium text-gray-700">
-                            Tenants (
-                            {rentData[property.property_id]?.tenants?.length ||
-                              0}
-                            ):
-                          </p>
-                          <div className="flex gap-8 text-xs text-gray-500">
-                            <span>Commencement Date</span>
-                            <span>Expiration Date</span>
+                        {/* 特殊なヘッダーカード */}
+                        <div className="grid grid-cols-4 gap-0 bg-white px-3 py-2 rounded mb-2">
+                          {/* 1. Tenant: */}
+                          <div className="text-left">
+                            <span className="text-sm font-medium text-gray-700">
+                              Tenants (
+                              {rentData[property.property_id]?.tenants
+                                ?.length || 0}
+                              ):
+                            </span>
+                          </div>
+
+                          {/* 2. Commencement Date + Expiration Date */}
+                          <div className="text-left">
+                            <span className="text-xs text-gray-500">
+                              Commencement Date
+                            </span>
+                            <span className="text-xs text-gray-500 ml-2">
+                              Expiration Date
+                            </span>
+                          </div>
+
+                          {/* 3. Pause Utility */}
+                          <div className="text-left">
+                            <span className="text-xs text-gray-500">
+                              Pause Utility
+                            </span>
+                          </div>
+
+                          {/* 4. Rent */}
+                          <div className="text-left">
+                            <span className="text-xs text-gray-500">Rent</span>
                           </div>
                         </div>
                         {rentData[property.property_id]?.tenants?.length > 0 ? (
@@ -539,42 +561,59 @@ export default function Properties() {
                                 return (
                                   <div
                                     key={tenant.user_id}
-                                    className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded"
+                                    className="grid grid-cols-4 gap-0 bg-gray-50 px-3 py-2 rounded"
                                   >
-                                    <div className="flex-1 flex items-center gap-8">
-                                      <div className="flex-1">
-                                        <div className="text-sm font-medium text-gray-900">
-                                          {tenant.nick_name || tenant.name}
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                          {tenant.email}
-                                        </div>
+                                    {/* 1. Name + Email */}
+                                    <div className="text-left">
+                                      <div className="text-sm font-medium text-gray-900">
+                                        {tenant.nick_name || tenant.name}
                                       </div>
-                                      <div className="flex gap-8 text-xs text-gray-600 min-w-0">
-                                        <span className="min-w-0">
+                                      <div className="text-xs text-gray-500">
+                                        {tenant.email}
+                                      </div>
+                                    </div>
+
+                                    {/* 2. Start Date + End Date + Edit */}
+                                    <div className="text-left">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-gray-600">
                                           {formatDate(
                                             stayPeriod?.start_date || null
                                           )}
                                         </span>
-                                        <span className="min-w-0">
+                                        <span className="text-xs text-gray-600">
                                           {formatDate(
                                             stayPeriod?.end_date || null
                                           )}
                                         </span>
+                                        <button
+                                          onClick={() =>
+                                            handleStayPeriodsClick(
+                                              tenant,
+                                              property
+                                            )
+                                          }
+                                          className="px-2 py-1 bg-gray-500 text-white text-xs rounded-full hover:bg-gray-600"
+                                        >
+                                          Edit
+                                        </button>
                                       </div>
+                                    </div>
+
+                                    {/* 3. Edit Button */}
+                                    <div className="text-left">
                                       <button
                                         onClick={() =>
-                                          handleStayPeriodsClick(
-                                            tenant,
-                                            property
-                                          )
+                                          handleBreakClick(tenant, property)
                                         }
-                                        className="px-2 py-1 bg-gray-500 text-white text-xs rounded-full hover:bg-gray-600"
+                                        className="px-3 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
                                       >
                                         Edit
                                       </button>
                                     </div>
-                                    <div className="flex items-center gap-2">
+
+                                    {/* 4. Rent Input */}
+                                    <div className="text-left">
                                       <div className="flex items-center">
                                         <span className="text-sm text-gray-700 mr-2">
                                           $
@@ -612,20 +651,12 @@ export default function Properties() {
                                           className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                         />
                                       </div>
-                                      <div className="w-16">
+                                      <div className="mt-1">
                                         {getSaveStatusIcon(
                                           property.property_id,
                                           tenant.user_id
                                         )}
                                       </div>
-                                      <button
-                                        onClick={() =>
-                                          handleBreakClick(tenant, property)
-                                        }
-                                        className="px-3 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
-                                      >
-                                        Break
-                                      </button>
                                     </div>
                                   </div>
                                 );
