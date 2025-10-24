@@ -21,8 +21,8 @@ const UTILITIES = ["electricity", "gas", "water", "internet", "garbage"];
 const DIVISION_METHODS = [
   { value: "", label: "Select Method" },
   { value: "fixed", label: "Fixed" },
-  { value: "equalshare", label: "Equal Share" },
-  { value: "bydays", label: "By Days" },
+  { value: "equalshare", label: "Headcounts" },
+  { value: "bydays", label: "Days Percent" },
 ];
 
 interface DivisionMethodsModalProps {
