@@ -488,68 +488,58 @@ export default function History() {
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-4">
-                  {filteredPayments.map((payment) => (
-                    <div
-                      key={payment.payment_id}
-                      className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900">
+                <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                  <div className="grid grid-cols-5 gap-0">
+                    {/* ヘッダー行 */}
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+                      Name
+                    </div>
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                      Property
+                    </div>
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                      Payment Date
+                    </div>
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                      Confirmation Date
+                    </div>
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20">
+                      Amount
+                    </div>
+
+                    {/* データ行 */}
+                    {filteredPayments.map((payment) => (
+                      <div key={payment.payment_id} className="contents">
+                        <div className="text-left py-3">
+                          <div className="text-lg font-semibold text-gray-900">
                             {payment.app_user.nick_name ||
                               payment.app_user.name}
-                          </h3>
-                          <p className="text-gray-600 mt-1">
+                          </div>
+                          <div className="text-gray-600 text-sm pl-9">
                             {payment.app_user.email}
-                          </p>
-                          <div className="mt-2 flex gap-2">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              ${payment.amount}
-                            </span>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                              {new Date(payment.paid_at).toLocaleDateString()}
-                            </span>
-                            {payment.isAccepted ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                Confirmed
-                                {payment.confirmedAt && (
-                                  <span className="ml-1 text-xs opacity-75">
-                                    (
-                                    {new Date(
-                                      payment.confirmedAt
-                                    ).toLocaleDateString()}
-                                    )
-                                  </span>
-                                )}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                Pending
-                              </span>
-                            )}
                           </div>
-                          {payment.note && (
-                            <p className="text-sm text-gray-600 mt-2">
-                              {payment.note}
-                            </p>
-                          )}
                         </div>
-                        {!payment.isAccepted && (
-                          <div className="ml-4">
-                            <button
-                              onClick={() =>
-                                handleAcceptPayment(payment.payment_id)
-                              }
-                              className="px-6 py-3 bg-green-500 text-white rounded-lg font-semibold text-lg hover:bg-green-600 shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                            >
-                              ✅ Confirm
-                            </button>
-                          </div>
-                        )}
+                        <div className="text-gray-600 py-3 pl-9">
+                          {userProperties.find(
+                            (p) => p.property_id === payment.property_id
+                          )?.name || "Unknown Property"}
+                        </div>
+                        <div className="text-gray-600 py-3 pl-9">
+                          {new Date(payment.paid_at).toLocaleDateString()}
+                        </div>
+                        <div className="text-gray-600 py-3 pl-9">
+                          {payment.isAccepted && payment.confirmedAt
+                            ? new Date(payment.confirmedAt).toLocaleDateString()
+                            : payment.isAccepted
+                            ? "Confirmed"
+                            : "Pending"}
+                        </div>
+                        <div className="text-2xl font-bold py-3 pl-20">
+                          ${payment.amount.toLocaleString()}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
