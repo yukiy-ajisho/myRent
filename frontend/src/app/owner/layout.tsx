@@ -25,12 +25,12 @@ const navigationItems = [
     href: "/owner/dashboard",
   },
   { id: "tenants", label: "Tenants", icon: Users, href: "/owner/tenants" },
-  {
-    id: "calculate",
-    label: "Calculate",
-    icon: TrendingUp,
-    href: "/owner/calculate",
-  },
+  // {
+  //   id: "calculate",
+  //   label: "Calculate",
+  //   icon: TrendingUp,
+  //   href: "/owner/calculate",
+  // },
   { id: "history", label: "History", icon: FileText, href: "/owner/history" },
   {
     id: "properties",
