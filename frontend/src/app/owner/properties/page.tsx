@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
-import TenantStayModal from "@/components/TenantStayModal";
 import DivisionMethodsModal from "@/components/DivisionMethodsModal";
 import CalculateModal from "@/components/CalculateModal";
 import CalculationSuccessModal from "@/components/CalculationSuccessModal";
+import StayPeriodsModal from "@/components/StayPeriodsModal";
+import BreakModal from "@/components/BreakModal";
 
 interface Property {
   property_id: string;
@@ -47,10 +48,6 @@ export default function Properties() {
     Record<string, "saving" | "saved" | "error">
   >({});
 
-  // Stay管理モーダル関連
-  const [stayModalOpen, setStayModalOpen] = useState(false);
-  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
-
   // Division Methods管理モーダル関連
   const [divisionModalOpen, setDivisionModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(
@@ -68,6 +65,24 @@ export default function Properties() {
       { month_start: string; bill_run_id: number; status: string }[]
     >
   >({});
+
+  // Stay periods管理
+  const [stayPeriods, setStayPeriods] = useState<
+    Record<
+      string,
+      { user_id: string; start_date: string | null; end_date: string | null }[]
+    >
+  >({});
+
+  // Stay Periods Modal管理
+  const [stayPeriodsModalOpen, setStayPeriodsModalOpen] = useState(false);
+  const [selectedTenantForStay, setSelectedTenantForStay] =
+    useState<Tenant | null>(null);
+
+  // Break Modal管理
+  const [breakModalOpen, setBreakModalOpen] = useState(false);
+  const [selectedTenantForBreak, setSelectedTenantForBreak] =
+    useState<Tenant | null>(null);
 
   // プロパティ作成フォーム関連の状態
   const [showForm, setShowForm] = useState(false);
@@ -192,6 +207,22 @@ export default function Properties() {
     }
   }, []);
 
+  const loadStayData = useCallback(async (propertyId: string) => {
+    try {
+      const data = await api.getStayData(propertyId);
+
+      setStayPeriods((prev) => ({
+        ...prev,
+        [propertyId]: data.stayRecords || [],
+      }));
+    } catch (error) {
+      console.error(
+        `Error loading stay data for property ${propertyId}:`,
+        error
+      );
+    }
+  }, []);
+
   const loadProperties = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -211,10 +242,11 @@ export default function Properties() {
       setProperties(data.properties);
       console.log("Properties loaded:", data.properties.length);
 
-      // 各プロパティの家賃データとbill runsを取得
+      // 各プロパティの家賃データ、bill runs、stay periodsを取得
       for (const property of data.properties) {
         await loadRentData(property.property_id);
         await loadBillRuns(property.property_id);
+        await loadStayData(property.property_id);
       }
     } catch (error) {
       console.error("Error loading properties:", error);
@@ -222,7 +254,7 @@ export default function Properties() {
     } finally {
       setIsLoading(false);
     }
-  }, [loadRentData, loadBillRuns]);
+  }, [loadRentData, loadBillRuns, loadStayData]);
 
   useEffect(() => {
     loadProperties();
@@ -355,16 +387,6 @@ export default function Properties() {
     }
   };
 
-  const handleStayClick = (tenant: Tenant) => {
-    setSelectedTenant(tenant);
-    setStayModalOpen(true);
-  };
-
-  const handleStayModalClose = () => {
-    setStayModalOpen(false);
-    setSelectedTenant(null);
-  };
-
   const handleDivisionClick = (property: Property) => {
     setSelectedProperty(property);
     setDivisionModalOpen(true);
@@ -383,6 +405,48 @@ export default function Properties() {
   const handleCalculateModalClose = () => {
     setCalculateModalOpen(false);
     setSelectedProperty(null);
+  };
+
+  // Stay Periods Modal handlers
+  const handleStayPeriodsClick = (tenant: Tenant, property: Property) => {
+    console.log("=== handleStayPeriodsClick DEBUG ===");
+    console.log("tenant:", tenant);
+    console.log("property:", property);
+    console.log("property.property_id:", property.property_id);
+
+    setSelectedProperty(property);
+    setSelectedTenantForStay(tenant);
+    setStayPeriodsModalOpen(true);
+  };
+
+  const handleStayPeriodsModalClose = () => {
+    setStayPeriodsModalOpen(false);
+    setSelectedTenantForStay(null);
+    setSelectedProperty(null);
+  };
+
+  // Break Modal handlers
+  const handleBreakClick = (tenant: Tenant, property: Property) => {
+    setSelectedProperty(property);
+    setSelectedTenantForBreak(tenant);
+    setBreakModalOpen(true);
+  };
+
+  const handleBreakModalClose = () => {
+    setBreakModalOpen(false);
+    setSelectedTenantForBreak(null);
+    setSelectedProperty(null);
+  };
+
+  // Stay periods data helper
+  const getStayPeriodForTenant = (propertyId: string, userId: string) => {
+    const propertyStayPeriods = stayPeriods[propertyId] || [];
+    return propertyStayPeriods.find((period) => period.user_id === userId);
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "-----";
+    return dateString;
   };
 
   return (
@@ -462,80 +526,120 @@ export default function Properties() {
                         </div>
                       </div>
                       <div className="mt-3">
-                        <p className="text-sm font-medium text-gray-700 mb-2">
-                          Tenants (
-                          {rentData[property.property_id]?.tenants?.length || 0}
-                          ):
-                        </p>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-medium text-gray-700">
+                            Tenants (
+                            {rentData[property.property_id]?.tenants?.length ||
+                              0}
+                            ):
+                          </p>
+                          <div className="flex gap-8 text-xs text-gray-500">
+                            <span>Commencement Date</span>
+                            <span>Expiration Date</span>
+                          </div>
+                        </div>
                         {rentData[property.property_id]?.tenants?.length > 0 ? (
                           <div className="space-y-2">
                             {rentData[property.property_id].tenants.map(
-                              (tenant) => (
-                                <div
-                                  key={tenant.user_id}
-                                  className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded"
-                                >
-                                  <div className="flex-1">
-                                    <div className="text-sm font-medium text-gray-900">
-                                      {tenant.name}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      {tenant.email}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex items-center">
-                                      <span className="text-sm text-gray-700 mr-2">
-                                        $
-                                      </span>
-                                      <input
-                                        type="text"
-                                        value={
-                                          currentRents[property.property_id]?.[
-                                            tenant.user_id
-                                          ] || 0
-                                        }
-                                        onChange={(e) =>
-                                          handleRentChange(
-                                            property.property_id,
-                                            tenant.user_id,
-                                            e.target.value
+                              (tenant) => {
+                                const stayPeriod = getStayPeriodForTenant(
+                                  property.property_id,
+                                  tenant.user_id
+                                );
+                                return (
+                                  <div
+                                    key={tenant.user_id}
+                                    className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded"
+                                  >
+                                    <div className="flex-1 flex items-center gap-8">
+                                      <div className="flex-1">
+                                        <div className="text-sm font-medium text-gray-900">
+                                          {tenant.name}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {tenant.email}
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-8 text-xs text-gray-600 min-w-0">
+                                        <span className="min-w-0">
+                                          {formatDate(
+                                            stayPeriod?.start_date || null
+                                          )}
+                                        </span>
+                                        <span className="min-w-0">
+                                          {formatDate(
+                                            stayPeriod?.end_date || null
+                                          )}
+                                        </span>
+                                      </div>
+                                      <button
+                                        onClick={() =>
+                                          handleStayPeriodsClick(
+                                            tenant,
+                                            property
                                           )
                                         }
-                                        onInput={(e) => {
-                                          const target =
-                                            e.target as HTMLInputElement;
-                                          const value = target.value;
-                                          // 先頭の0を削除（例: "0200" → "200"）
-                                          const cleanValue =
-                                            value.replace(/^0+/, "") || "0";
-                                          if (value !== cleanValue) {
-                                            target.value = cleanValue;
+                                        className="px-2 py-1 bg-gray-500 text-white text-xs rounded-full hover:bg-gray-600"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex items-center">
+                                        <span className="text-sm text-gray-700 mr-2">
+                                          $
+                                        </span>
+                                        <input
+                                          type="text"
+                                          value={
+                                            currentRents[
+                                              property.property_id
+                                            ]?.[tenant.user_id] || 0
+                                          }
+                                          onChange={(e) =>
                                             handleRentChange(
                                               property.property_id,
                                               tenant.user_id,
-                                              cleanValue
-                                            );
+                                              e.target.value
+                                            )
                                           }
-                                        }}
-                                        className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                      />
+                                          onInput={(e) => {
+                                            const target =
+                                              e.target as HTMLInputElement;
+                                            const value = target.value;
+                                            // 先頭の0を削除（例: "0200" → "200"）
+                                            const cleanValue =
+                                              value.replace(/^0+/, "") || "0";
+                                            if (value !== cleanValue) {
+                                              target.value = cleanValue;
+                                              handleRentChange(
+                                                property.property_id,
+                                                tenant.user_id,
+                                                cleanValue
+                                              );
+                                            }
+                                          }}
+                                          className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                      <div className="w-16">
+                                        {getSaveStatusIcon(
+                                          property.property_id,
+                                          tenant.user_id
+                                        )}
+                                      </div>
+                                      <button
+                                        onClick={() =>
+                                          handleBreakClick(tenant, property)
+                                        }
+                                        className="px-3 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
+                                      >
+                                        Break
+                                      </button>
                                     </div>
-                                    <div className="w-16">
-                                      {getSaveStatusIcon(
-                                        property.property_id,
-                                        tenant.user_id
-                                      )}
-                                    </div>
-                                    <button
-                                      onClick={() => handleStayClick(tenant)}
-                                      className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
-                                    >
-                                      Stay
-                                    </button>
                                   </div>
-                                </div>
-                              )
+                                );
+                              }
                             )}
                           </div>
                         ) : (
@@ -630,31 +734,6 @@ export default function Properties() {
         </div>
       )}
 
-      {/* Stay管理モーダル */}
-      {stayModalOpen && selectedTenant && (
-        <TenantStayModal
-          property={{
-            property_id:
-              properties.find((p) =>
-                rentData[p.property_id]?.tenants?.some(
-                  (t) => t.user_id === selectedTenant.user_id
-                )
-              )?.property_id || "",
-            name:
-              properties.find((p) =>
-                rentData[p.property_id]?.tenants?.some(
-                  (t) => t.user_id === selectedTenant.user_id
-                )
-              )?.name || "",
-            timezone: "UTC",
-            active: true,
-          }}
-          tenant={selectedTenant}
-          isOpen={stayModalOpen}
-          onClose={handleStayModalClose}
-        />
-      )}
-
       {/* Division Methods管理モーダル */}
       {divisionModalOpen && selectedProperty && (
         <DivisionMethodsModal
@@ -695,6 +774,44 @@ export default function Properties() {
           loadProperties();
         }}
       />
+
+      {/* Stay Periods Modal */}
+      {stayPeriodsModalOpen && selectedTenantForStay && (
+        <StayPeriodsModal
+          property={{
+            property_id: String(selectedProperty?.property_id || ""),
+            name: selectedProperty?.name || "",
+            timezone: "UTC",
+            active: true,
+          }}
+          tenant={selectedTenantForStay}
+          isOpen={stayPeriodsModalOpen}
+          onClose={handleStayPeriodsModalClose}
+          onSave={() => {
+            // Stay periods保存後にデータを再読み込み
+            loadProperties();
+          }}
+        />
+      )}
+
+      {/* Break Modal */}
+      {breakModalOpen && selectedTenantForBreak && (
+        <BreakModal
+          property={{
+            property_id: String(selectedProperty?.property_id || ""),
+            name: selectedProperty?.name || "",
+            timezone: "UTC",
+            active: true,
+          }}
+          tenant={selectedTenantForBreak}
+          isOpen={breakModalOpen}
+          onClose={handleBreakModalClose}
+          onSave={() => {
+            // Break periods保存後にデータを再読み込み
+            loadProperties();
+          }}
+        />
+      )}
     </div>
   );
 }
