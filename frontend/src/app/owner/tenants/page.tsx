@@ -13,6 +13,7 @@ interface Tenant {
   property_id: string;
   property_name: string;
   nick_name?: string | null;
+  phone_number?: string | null;
 }
 
 interface GroupedTenant {
@@ -22,6 +23,7 @@ interface GroupedTenant {
   user_type: string;
   personal_multiplier: number;
   nick_name?: string | null;
+  phone_number?: string | null;
   properties: {
     property_id: string;
     property_name: string;
@@ -117,6 +119,7 @@ export default function Tenants() {
           user_type: tenant.user_type,
           personal_multiplier: tenant.personal_multiplier,
           nick_name: tenant.nick_name,
+          phone_number: tenant.phone_number,
           properties: [],
         };
       }
@@ -329,6 +332,11 @@ export default function Tenants() {
                         </button>
                       </div>
                       <p className="text-gray-600 mt-1">{tenant.email}</p>
+                      {tenant.phone_number && (
+                        <p className="text-gray-600 text-sm mt-1">
+                          📞 {tenant.phone_number}
+                        </p>
+                      )}
                       <div className="mt-2 flex gap-2 flex-wrap">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                           Household Size: {tenant.personal_multiplier}

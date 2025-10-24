@@ -1046,7 +1046,8 @@ app.get("/rent-data", async (req, res) => {
           name,
           email,
           user_type,
-          personal_multiplier
+          personal_multiplier,
+          phone_number
         ),
         property:property_id(name)
         `
@@ -1159,7 +1160,8 @@ app.get("/rent-data/:propertyId", async (req, res) => {
           name,
           email,
           user_type,
-          personal_multiplier
+          personal_multiplier,
+          phone_number
         )
       `
         )
@@ -1315,7 +1317,8 @@ app.get("/bootstrap", async (req, res) => {
               name,
               email,
               user_type,
-              personal_multiplier
+              personal_multiplier,
+              phone_number
             )
           `
           )
@@ -3296,6 +3299,7 @@ app.post("/select-user-type", async (req, res) => {
         email: req.user.email,
         user_type: user_type,
         personal_multiplier: 1.0,
+        phone_number: null,
       })
       .select("user_id, user_type")
       .single();
