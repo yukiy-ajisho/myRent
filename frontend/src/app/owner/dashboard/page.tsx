@@ -214,9 +214,7 @@ export default function Dashboard() {
               {filteredDashboardData.map((tenant) => (
                 <div
                   key={`${tenant.user_id}-${tenant.property_id}`}
-                  className={`bg-white border rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow ${getBalanceBgColor(
-                    tenant.current_balance
-                  )}`}
+                  className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm transition-shadow"
                 >
                   <div className="grid grid-cols-4 gap-0">
                     <div className="text-lg font-semibold text-gray-900">
