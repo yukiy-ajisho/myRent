@@ -517,7 +517,7 @@ export default function Properties() {
                       </div>
                       <div className="mt-3">
                         {/* 特殊なヘッダーカード */}
-                        <div className="grid grid-cols-4 gap-0 bg-white px-3 py-2 rounded mb-2">
+                        <div className="grid grid-cols-[1fr_1.2fr_1fr_1fr] gap-0 bg-white px-3 py-2 rounded mb-2">
                           {/* 1. Tenant: */}
                           <div className="text-left">
                             <span className="text-sm font-medium text-gray-700">
@@ -530,12 +530,17 @@ export default function Properties() {
 
                           {/* 2. Commencement Date + Expiration Date */}
                           <div className="text-left">
-                            <span className="text-xs text-gray-500">
-                              Commencement Date
-                            </span>
-                            <span className="text-xs text-gray-500 ml-2">
-                              Expiration Date
-                            </span>
+                            <div className="grid grid-cols-3 gap-0">
+                              <span className="text-xs text-gray-500">
+                                Commencement
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                Expiration
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                
+                              </span>
+                            </div>
                           </div>
 
                           {/* 3. Pause Utility */}
@@ -561,7 +566,7 @@ export default function Properties() {
                                 return (
                                   <div
                                     key={tenant.user_id}
-                                    className="grid grid-cols-4 gap-0 bg-gray-50 px-3 py-2 rounded"
+                                    className="grid grid-cols-[1fr_1.2fr_1fr_1fr] gap-0 bg-gray-50 px-3 py-2 rounded"
                                   >
                                     {/* 1. Name + Email */}
                                     <div className="text-left">
@@ -575,7 +580,7 @@ export default function Properties() {
 
                                     {/* 2. Start Date + End Date + Edit */}
                                     <div className="text-left">
-                                      <div className="flex items-center gap-2">
+                                      <div className="grid grid-cols-3 gap-0">
                                         <span className="text-xs text-gray-600">
                                           {formatDate(
                                             stayPeriod?.start_date || null
