@@ -241,7 +241,7 @@ export default function History() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
+      <div className="mb-4">
         {/* タブボタン */}
         <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-4 w-fit">
           <button
@@ -309,7 +309,6 @@ export default function History() {
                   borderRadius: "8px",
                 }}
               >
-                <h3 style={{ marginBottom: "15px" }}></h3>
                 <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
                   {/* Year Filter */}
                   <div>
@@ -414,43 +413,64 @@ export default function History() {
                         cursor: "pointer",
                       }}
                     >
-                      Clear Filters
+                      Reset
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Bill Lines List */}
-              {filteredBillLines.map((billLine) => (
-                <div
-                  key={billLine.bill_line_id}
-                  style={{
-                    marginBottom: "10px",
-                    padding: "10px",
-                    border: "1px solid #ccc",
-                  }}
-                >
-                  <div>
-                    Tenant name:{" "}
-                    {billLine.app_user?.nick_name ||
-                      billLine.app_user?.name ||
-                      "Unknown"}
+              {/* Bill Lines Table */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                <div className="grid grid-cols-5 gap-0">
+                  {/* ヘッダー行 */}
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+                    Name
                   </div>
-                  <div>Amount: ${billLine.amount.toLocaleString()}</div>
-                  <div>
-                    Utility:{" "}
-                    {billLine.utility.charAt(0).toUpperCase() +
-                      billLine.utility.slice(1)}
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                    Property
                   </div>
-                  <div>
-                    Month:{" "}
-                    {billLine.bill_run?.month_start
-                      ? billLine.bill_run.month_start.substring(0, 7)
-                      : "Unknown"}
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                    Utility
                   </div>
-                </div>
-              ))}
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                    Month
+                  </div>
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20">
+                    Amount
+                  </div>
 
+                  {/* データ行 */}
+                  {filteredBillLines.map((billLine) => (
+                    <div key={billLine.bill_line_id} className="contents">
+                      <div className="text-left py-3">
+                        <div className="text-lg font-semibold text-gray-900">
+                          {billLine.app_user?.nick_name ||
+                            billLine.app_user?.name ||
+                            "Unknown"}
+                        </div>
+                      </div>
+                      <div className="text-gray-600 py-3 pl-9">
+                        {userProperties.find(
+                          (p) =>
+                            p.property_id === billLine.bill_run?.property_id
+                        )?.name || "Unknown Property"}
+                      </div>
+                      <div className="text-gray-600 py-3 pl-9">
+                        {billLine.utility.charAt(0).toUpperCase() +
+                          billLine.utility.slice(1)}
+                      </div>
+                      <div className="text-gray-600 py-3 pl-9">
+                        {billLine.bill_run?.month_start
+                          ? billLine.bill_run.month_start.substring(0, 7)
+                          : "Unknown"}
+                      </div>
+                      <div className="text-2xl font-bold py-3 pl-20">
+                        ${billLine.amount.toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
               {/* Results Count - 一番下に表示 */}
               <div
                 style={{

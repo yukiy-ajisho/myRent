@@ -188,7 +188,12 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* メインコンテンツ（下部90%） */}
-        <main className="flex-1 overflow-y-auto bg-gray-50">{children}</main>
+        <main
+          className="flex-1 overflow-y-auto bg-gray-50"
+          style={{ scrollbarGutter: "stable" }}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );
