@@ -22,7 +22,7 @@ const DIVISION_METHODS = [
   { value: "", label: "Select Method" },
   { value: "fixed", label: "Fixed" },
   { value: "equalshare", label: "Headcounts" },
-  { value: "bydays", label: "Days Percent" },
+  { value: "bydays", label: "Days Precent" },
 ];
 
 interface DivisionMethodsModalProps {

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 const DIVISION_METHOD_LABELS = {
   fixed: "Fixed",
   equalshare: "Headcounts",
-  bydays: "Days Percent",
+  bydays: "Days Precent",
 };
 
 interface PreviewModalProps {
