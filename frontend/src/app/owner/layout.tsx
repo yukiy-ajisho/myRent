@@ -24,6 +24,12 @@ const navigationItems = [
     icon: BarChart3,
     href: "/owner/dashboard",
   },
+  {
+    id: "properties",
+    label: "Properties",
+    icon: Home,
+    href: "/owner/properties",
+  },
   { id: "tenants", label: "Tenants", icon: Users, href: "/owner/tenants" },
   // {
   //   id: "calculate",
@@ -32,12 +38,6 @@ const navigationItems = [
   //   href: "/owner/calculate",
   // },
   { id: "history", label: "History", icon: FileText, href: "/owner/history" },
-  {
-    id: "properties",
-    label: "Properties",
-    icon: Home,
-    href: "/owner/properties",
-  },
 ];
 
 // プロパティ選択コンポーネント
@@ -145,12 +145,12 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                   }}
                 >
                   <IconComponent
-                    className="h-10 w-10 !h-10 !w-10"
-                    style={{ height: "40px", width: "40px" }}
+                    className="h-6 w-6 !h-6 !w-6"
+                    style={{ height: "24px", width: "24px" }}
                   />
                   <span
-                    className="text-2xl !text-2xl"
-                    style={{ fontSize: "24px" }}
+                    className="text-lg !text-lg"
+                    style={{ fontSize: "18px" }}
                   >
                     {item.label}
                   </span>
