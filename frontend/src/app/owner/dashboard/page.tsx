@@ -210,30 +210,47 @@ export default function Dashboard() {
               </p>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {filteredDashboardData.map((tenant) => (
-                <div
-                  key={`${tenant.user_id}-${tenant.property_id}`}
-                  className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm transition-shadow"
-                >
-                  <div className="grid grid-cols-4 gap-0">
-                    <div className="text-lg font-semibold text-gray-900">
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <div className="grid grid-cols-4 gap-0">
+                {/* ヘッダー行 */}
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+                  Name
+                </div>
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+                  Email
+                </div>
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20">
+                  Last Updated
+                </div>
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-60">
+                  Balance
+                </div>
+
+                {/* データ行 */}
+                {filteredDashboardData.map((tenant) => (
+                  <div
+                    key={`${tenant.user_id}-${tenant.property_id}`}
+                    className="contents"
+                  >
+                    <div className="text-lg font-semibold text-gray-900 py-3">
                       {tenant.nick_name || tenant.name}
                     </div>
-                    <div className="text-gray-600 pl-15">{tenant.email}</div>
-                    <div className="text-sm text-gray-500 pl-20">
-                      Last updated: {formatDate(tenant.last_updated)}
+                    <div className="text-gray-600 py-3 pl-15">
+                      {tenant.email}
+                    </div>
+                    <div className="text-sm text-gray-500 py-3 pl-20">
+                      {formatDate(tenant.last_updated)}
                     </div>
                     <div
-                      className={`text-2xl font-bold text-right ${getBalanceColor(
+                      className={`text-2xl font-bold py-3 pl-60 ${getBalanceColor(
                         tenant.current_balance
                       )}`}
                     >
                       {formatCurrency(tenant.current_balance)}
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
