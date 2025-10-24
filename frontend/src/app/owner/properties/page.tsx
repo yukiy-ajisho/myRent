@@ -453,7 +453,7 @@ export default function Properties() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">My Properties</h1>
+        <div></div>
         <button
           onClick={() => setShowForm(true)}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"

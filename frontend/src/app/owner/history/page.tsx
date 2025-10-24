@@ -312,13 +312,7 @@ export default function History() {
                 <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
                   {/* Year Filter */}
                   <div>
-                    <label
-                      style={{
-                        display: "block",
-                        marginBottom: "5px",
-                        fontWeight: "bold",
-                      }}
-                    >
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Year:
                     </label>
                     <select
@@ -341,13 +335,7 @@ export default function History() {
 
                   {/* Month Filter */}
                   <div>
-                    <label
-                      style={{
-                        display: "block",
-                        marginBottom: "5px",
-                        fontWeight: "bold",
-                      }}
-                    >
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Month:
                     </label>
                     <select
@@ -370,13 +358,7 @@ export default function History() {
 
                   {/* Name Filter */}
                   <div>
-                    <label
-                      style={{
-                        display: "block",
-                        marginBottom: "5px",
-                        fontWeight: "bold",
-                      }}
-                    >
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Name:
                     </label>
                     <select
