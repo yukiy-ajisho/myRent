@@ -3610,6 +3610,147 @@ app.get("/latest-bill-run-month/:propertyId", async (req, res) => {
   }
 });
 
+// Break Period専用のAPIエンドポイント
+
+// Break Period追加
+app.post("/break-periods", async (req, res) => {
+  try {
+    const { property_id, user_id, break_start, break_end } = req.body;
+    const userId = req.user.id; // ← ADD AUTHENTICATION
+
+    console.log(
+      `[SECURITY] User ${userId} adding break period for property ${property_id}`
+    );
+
+    // ← ADD AUTHORIZATION CHECK
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", property_id)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied to property ${property_id} for user ${userId}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // stay_recordから該当のstay_idを取得
+    const { data: stayRecord, error: stayError } = await supabase
+      .from("stay_record")
+      .select("stay_id")
+      .eq("user_id", user_id)
+      .eq("property_id", property_id)
+      .single();
+
+    if (stayError || !stayRecord) {
+      console.log(
+        `[SECURITY] No stay record found for user ${user_id} in property ${property_id}`
+      );
+      return res.status(404).json({
+        error:
+          "No stay record found for this tenant. Please set stay periods first.",
+      });
+    }
+
+    // break_recordに新規レコードを追加
+    const { data: newBreakRecord, error: insertError } = await supabase
+      .from("break_record")
+      .insert({
+        stay_id: stayRecord.stay_id,
+        break_start: break_start,
+        break_end: break_end,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("Error inserting break record:", insertError);
+      return res.status(500).json({ error: "Failed to add break period" });
+    }
+
+    console.log(
+      `[SECURITY] Break period added successfully for property ${property_id}`
+    );
+
+    res.json({
+      success: true,
+      break_record: newBreakRecord,
+    });
+  } catch (error) {
+    console.error("Break period addition error:", error);
+    res.status(500).json({ error: "Failed to add break period" });
+  }
+});
+
+// Break Period削除
+app.delete("/break-periods/:break_record_id", async (req, res) => {
+  try {
+    const { break_record_id } = req.params;
+    const userId = req.user.id; // ← ADD AUTHENTICATION
+
+    console.log(
+      `[SECURITY] User ${userId} deleting break period ${break_record_id}`
+    );
+
+    // break_recordから該当レコードを取得（stay_idも含めて）
+    const { data: breakRecord, error: breakError } = await supabase
+      .from("break_record")
+      .select(
+        `
+        break_record_id,
+        stay_id,
+        stay_record!inner(
+          property_id,
+          user_property!inner(user_id)
+        )
+      `
+      )
+      .eq("break_record_id", break_record_id)
+      .single();
+
+    if (breakError || !breakRecord) {
+      console.log(`[SECURITY] Break record ${break_record_id} not found`);
+      return res.status(404).json({ error: "Break period not found" });
+    }
+
+    // プロパティのオーナー権限チェック
+    if (breakRecord.stay_record.user_property.user_id !== userId) {
+      console.log(
+        `[SECURITY] Access denied to break record ${break_record_id}`
+      );
+      return res
+        .status(403)
+        .json({ error: "Access denied to this break period" });
+    }
+
+    // break_recordを削除
+    const { error: deleteError } = await supabase
+      .from("break_record")
+      .delete()
+      .eq("break_record_id", break_record_id);
+
+    if (deleteError) {
+      console.error("Error deleting break record:", deleteError);
+      return res.status(500).json({ error: "Failed to delete break period" });
+    }
+
+    console.log(
+      `[SECURITY] Break period ${break_record_id} deleted successfully`
+    );
+
+    res.json({
+      success: true,
+      message: "Break period deleted successfully",
+    });
+  } catch (error) {
+    console.error("Break period deletion error:", error);
+    res.status(500).json({ error: "Failed to delete break period" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });

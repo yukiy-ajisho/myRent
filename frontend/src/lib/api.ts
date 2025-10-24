@@ -361,4 +361,23 @@ export const api = {
   getLatestBillRunMonth: (propertyId: string) => {
     return apiRequest(`/latest-bill-run-month/${propertyId}`);
   },
+
+  // Break Period専用のAPI関数
+  addBreakPeriod: (data: {
+    property_id: string;
+    user_id: string;
+    break_start: string;
+    break_end: string;
+  }) => {
+    return apiRequest("/break-periods", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteBreakPeriod: (breakRecordId: string) => {
+    return apiRequest(`/break-periods/${breakRecordId}`, {
+      method: "DELETE",
+    });
+  },
 };

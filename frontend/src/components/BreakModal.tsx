@@ -27,8 +27,9 @@ interface BreakModalProps {
 
 interface BreakRecord {
   user_id: string;
-  start_date: string;
-  end_date: string;
+  break_start: string;
+  break_end: string;
+  break_record_id?: string; // オプショナルフィールドを追加
 }
 
 export default function BreakModal({
@@ -39,12 +40,9 @@ export default function BreakModal({
   onSave,
 }: BreakModalProps) {
   const [breakRecords, setBreakRecords] = useState<BreakRecord[]>([]);
-  const [existingStayPeriods, setExistingStayPeriods] = useState<
-    Record<string, { startDate: string; endDate: string | null }>
-  >({});
   const [newBreak, setNewBreak] = useState({
-    start_date: "",
-    end_date: "",
+    break_start: "",
+    break_end: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -66,24 +64,16 @@ export default function BreakModal({
       const data = await api.getStayData(property.property_id);
 
       // 現在のテナントのbreak recordsを取得
-      const tenantBreakRecords = data.breakRecords.filter(
-        (record: BreakRecord) => record.user_id === tenant.user_id
-      );
-
-      // 既存のstay_periodsを保存
-      const stayPeriods: Record<
-        string,
-        { startDate: string; endDate: string | null }
-      > = {};
-      data.stayRecords.forEach((record: any) => {
-        stayPeriods[record.user_id] = {
-          startDate: record.start_date || "",
-          endDate: record.end_date,
-        };
-      });
+      const tenantBreakRecords = data.breakRecords
+        .filter((record: any) => record.stay_record.user_id === tenant.user_id)
+        .map((record: any) => ({
+          user_id: record.stay_record.user_id,
+          break_start: record.break_start,
+          break_end: record.break_end,
+          break_record_id: record.break_id,
+        }));
 
       setBreakRecords(tenantBreakRecords);
-      setExistingStayPeriods(stayPeriods);
     } catch (error) {
       console.error("Error loading break data:", error);
       setMessage("Error loading break data");
@@ -94,8 +84,8 @@ export default function BreakModal({
 
   const handleAddBreak = () => {
     setNewBreak({
-      start_date: "",
-      end_date: "",
+      break_start: "",
+      break_end: "",
     });
     setShowAddForm(true);
   };
@@ -106,46 +96,39 @@ export default function BreakModal({
       setMessage("");
 
       // 日付の検証
-      if (!newBreak.start_date || !newBreak.end_date) {
+      if (!newBreak.break_start || !newBreak.break_end) {
         setMessage("Please fill in both start and end dates");
         return;
       }
 
-      if (new Date(newBreak.start_date) > new Date(newBreak.end_date)) {
+      if (new Date(newBreak.break_start) > new Date(newBreak.break_end)) {
         setMessage("Start date must be before end date");
         return;
       }
 
-      // 新しいbreak recordを追加
+      // 新しいBreak Period専用APIを使用
+      const response = await api.addBreakPeriod({
+        property_id: property.property_id,
+        user_id: tenant.user_id,
+        break_start: newBreak.break_start,
+        break_end: newBreak.break_end,
+      });
+
+      // ローカル状態を更新
       const updatedBreakRecords = [
         ...breakRecords,
         {
           user_id: tenant.user_id,
-          start_date: newBreak.start_date,
-          end_date: newBreak.end_date,
+          break_start: newBreak.break_start,
+          break_end: newBreak.break_end,
+          break_record_id: response.break_record.break_record_id, // 新しいbreak_record_idを追加
         },
       ];
 
-      // Stay periodsは既存のものを保持（Break periodsのみを更新）
-      await api.saveStayPeriods({
-        propertyId: property.property_id,
-        stayPeriods: existingStayPeriods, // 既存のstay_periodsを保持
-        breakPeriods: updatedBreakRecords.reduce((acc, period) => {
-          if (!acc[period.user_id]) {
-            acc[period.user_id] = [];
-          }
-          acc[period.user_id].push({
-            breakStart: period.start_date,
-            breakEnd: period.end_date,
-          });
-          return acc;
-        }, {} as Record<string, Array<{ breakStart: string; breakEnd: string }>>),
-      });
-
       setBreakRecords(updatedBreakRecords);
       setNewBreak({
-        start_date: "",
-        end_date: "",
+        break_start: "",
+        break_end: "",
       });
       setShowAddForm(false);
       setMessage("Break period added successfully!");
@@ -165,24 +148,29 @@ export default function BreakModal({
       setIsSaving(true);
       setMessage("");
 
+      const recordToDelete = breakRecords[index];
+
+      // break_record_idが存在する場合は専用APIを使用
+      if (recordToDelete.break_record_id) {
+        await api.deleteBreakPeriod(recordToDelete.break_record_id);
+      } else {
+        // フォールバック: 古いAPIを使用（既存のレコード用）
+        const updatedBreakRecords = breakRecords.filter((_, i) => i !== index);
+
+        await api.saveStayPeriods({
+          propertyId: property.property_id,
+          stayPeriods: {}, // stay_recordは変更しない
+          breakPeriods: {
+            [tenant.user_id]: updatedBreakRecords.map((record) => ({
+              breakStart: record.break_start,
+              breakEnd: record.break_end,
+            })),
+          },
+        });
+      }
+
+      // ローカル状態を更新
       const updatedBreakRecords = breakRecords.filter((_, i) => i !== index);
-
-      // Stay periodsは既存のものを保持（Break periodsのみを更新）
-      await api.saveStayPeriods({
-        propertyId: property.property_id,
-        stayPeriods: existingStayPeriods, // 既存のstay_periodsを保持
-        breakPeriods: updatedBreakRecords.reduce((acc, period) => {
-          if (!acc[period.user_id]) {
-            acc[period.user_id] = [];
-          }
-          acc[period.user_id].push({
-            breakStart: period.start_date,
-            breakEnd: period.end_date,
-          });
-          return acc;
-        }, {} as Record<string, Array<{ breakStart: string; breakEnd: string }>>),
-      });
-
       setBreakRecords(updatedBreakRecords);
       setMessage("Break period deleted successfully!");
 
@@ -239,7 +227,7 @@ export default function BreakModal({
                       <div className="flex-1">
                         <div className="text-sm">
                           <span className="font-medium">
-                            {record.start_date} to {record.end_date}
+                            {record.break_start} to {record.break_end}
                           </span>
                         </div>
                       </div>
@@ -276,9 +264,12 @@ export default function BreakModal({
                     </label>
                     <input
                       type="date"
-                      value={newBreak.start_date}
+                      value={newBreak.break_start}
                       onChange={(e) =>
-                        setNewBreak({ ...newBreak, start_date: e.target.value })
+                        setNewBreak({
+                          ...newBreak,
+                          break_start: e.target.value,
+                        })
                       }
                       className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
@@ -289,9 +280,9 @@ export default function BreakModal({
                     </label>
                     <input
                       type="date"
-                      value={newBreak.end_date}
+                      value={newBreak.break_end}
                       onChange={(e) =>
-                        setNewBreak({ ...newBreak, end_date: e.target.value })
+                        setNewBreak({ ...newBreak, break_end: e.target.value })
                       }
                       className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
