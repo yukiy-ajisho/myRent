@@ -28,7 +28,7 @@ const DIVISION_METHODS = [
   },
   {
     value: "bydays",
-    label: "Days Precent",
+    label: "Days Present",
     description: "Split by percentage of days stayed",
   },
 ];
@@ -95,7 +95,7 @@ export default function DivisionMethodsModal({
       setHasChanges(false);
     } catch (error) {
       console.error("Error loading division rules:", error);
-      setMessage("Error loading division rules");
+      setMessage("Error loading split preferences");
     } finally {
       setIsLoading(false);
     }
@@ -129,10 +129,10 @@ export default function DivisionMethodsModal({
 
       setOriginalRules({ ...currentRules });
       setHasChanges(false);
-      setMessage("Division methods saved successfully!");
+      setMessage("Split preferences saved successfully!");
     } catch (error) {
       console.error("Error saving division rules:", error);
-      setMessage("Error saving division rules");
+      setMessage("Error saving split preferences");
     } finally {
       setIsSaving(false);
     }
@@ -152,7 +152,7 @@ export default function DivisionMethodsModal({
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold">
-              Division Methods for {property.name}
+              Split Preference for {property.name}
             </h2>
             <button
               onClick={onClose}
@@ -164,7 +164,7 @@ export default function DivisionMethodsModal({
 
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="text-lg">Loading division methods...</div>
+              <div className="text-lg">Loading split preferences...</div>
             </div>
           ) : (
             <>
@@ -250,7 +250,7 @@ export default function DivisionMethodsModal({
                         : "bg-gray-300 text-gray-500 cursor-not-allowed"
                     }`}
                   >
-                    {isSaving ? "Saving..." : "Save Changes"}
+                    {isSaving ? "Saving..." : "Save Split Preferences"}
                   </button>
                   <button
                     onClick={handleCancel}

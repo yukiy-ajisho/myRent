@@ -49,7 +49,7 @@ export default function Properties() {
     Record<string, "saving" | "saved" | "error">
   >({});
 
-  // Division Methods管理モーダル関連
+  // Split Preference管理モーダル関連
   const [divisionModalOpen, setDivisionModalOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(
     null
@@ -458,7 +458,7 @@ export default function Properties() {
           onClick={() => setShowForm(true)}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
         >
-          Create Property
+          Add Property
         </button>
       </div>
 
@@ -498,7 +498,7 @@ export default function Properties() {
                             onClick={() => handleDivisionClick(property)}
                             className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
                           >
-                            Division Methods
+                            Split Preference
                           </button>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-gray-600">
@@ -724,7 +724,7 @@ export default function Properties() {
         </div>
       )}
 
-      {/* Division Methods管理モーダル */}
+      {/* Split Preference管理モーダル */}
       {divisionModalOpen && selectedProperty && (
         <DivisionMethodsModal
           property={{
