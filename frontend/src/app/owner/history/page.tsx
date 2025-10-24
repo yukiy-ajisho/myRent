@@ -42,7 +42,7 @@ export default function History() {
   const { userProperties } = useProperty();
 
   // タブ切り替えの状態
-  const [activeTab, setActiveTab] = useState<"bill" | "payment">("bill");
+  const [activeTab, setActiveTab] = useState<"bill" | "payment">("payment");
 
   // Bill History の状態
   const [allBillLines, setAllBillLines] = useState<BillLine[]>([]);
@@ -245,16 +245,6 @@ export default function History() {
         {/* タブボタン */}
         <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
           <button
-            onClick={() => setActiveTab("bill")}
-            className={`px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === "bill"
-                ? "bg-white text-blue-700 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            Bill History
-          </button>
-          <button
             onClick={() => setActiveTab("payment")}
             className={`px-4 py-2 rounded-md font-medium transition-colors ${
               activeTab === "payment"
@@ -263,6 +253,16 @@ export default function History() {
             }`}
           >
             Payment History
+          </button>
+          <button
+            onClick={() => setActiveTab("bill")}
+            className={`px-4 py-2 rounded-md font-medium transition-colors ${
+              activeTab === "bill"
+                ? "bg-white text-blue-700 shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Bill History
           </button>
         </div>
 
