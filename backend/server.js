@@ -164,9 +164,54 @@ app.get("/bill-line", async (req, res) => {
       throw error;
     }
 
-    console.log("All bill lines fetched:", billLines?.length || 0);
+    // 4. ニックネームを取得
+    const tenantIds =
+      billLines
+        ?.map((bl) => bl.user_id)
+        .filter((id, index, arr) => arr.indexOf(id) === index) || []; // 重複除去
 
-    res.json({ billLines });
+    console.log("=== DEBUG: Bill line nickname fetching ===");
+    console.log("Tenant IDs:", tenantIds);
+
+    let nicknames = {};
+    if (tenantIds.length > 0) {
+      const { data: ownerTenants, error: nickError } = await supabase
+        .from("owner_tenant")
+        .select("tenant_id, nick_name")
+        .eq("owner_id", userId)
+        .in("tenant_id", tenantIds);
+
+      console.log("Owner tenants query result:", ownerTenants);
+      console.log("Nickname query error:", nickError);
+
+      if (nickError) {
+        console.error("Error fetching nicknames:", nickError);
+      } else {
+        nicknames =
+          ownerTenants?.reduce((acc, ot) => {
+            acc[ot.tenant_id] = ot.nick_name;
+            return acc;
+          }, {}) || {};
+        console.log("Final nicknames object:", nicknames);
+      }
+    }
+
+    // 5. ニックネームをbillLinesに追加
+    const billLinesWithNicknames =
+      billLines?.map((billLine) => ({
+        ...billLine,
+        app_user: {
+          ...billLine.app_user,
+          nick_name: nicknames[billLine.user_id] || null,
+        },
+      })) || [];
+
+    console.log("=== DEBUG: Final bill lines with nicknames ===");
+    console.log("First bill line:", billLinesWithNicknames[0]);
+
+    console.log("All bill lines fetched:", billLinesWithNicknames?.length || 0);
+
+    res.json({ billLines: billLinesWithNicknames });
   } catch (error) {
     console.error("Bill line error:", error);
     res.status(500).json({ error: "Failed to fetch bill line data" });
@@ -633,6 +678,38 @@ app.get("/payments", async (req, res) => {
 
     if (paymentsError) throw paymentsError;
 
+    // ニックネームを取得
+    const tenantIds =
+      payments
+        ?.map((p) => p.user_id)
+        .filter((id, index, arr) => arr.indexOf(id) === index) || []; // 重複除去
+
+    console.log("=== DEBUG: Payment nickname fetching ===");
+    console.log("Tenant IDs:", tenantIds);
+
+    let nicknames = {};
+    if (tenantIds.length > 0) {
+      const { data: ownerTenants, error: nickError } = await supabase
+        .from("owner_tenant")
+        .select("tenant_id, nick_name")
+        .eq("owner_id", userId)
+        .in("tenant_id", tenantIds);
+
+      console.log("Owner tenants query result:", ownerTenants);
+      console.log("Nickname query error:", nickError);
+
+      if (nickError) {
+        console.error("Error fetching nicknames:", nickError);
+      } else {
+        nicknames =
+          ownerTenants?.reduce((acc, ot) => {
+            acc[ot.tenant_id] = ot.nick_name;
+            return acc;
+          }, {}) || {};
+        console.log("Final nicknames object:", nicknames);
+      }
+    }
+
     // 既にledgerに反映済みの支払いをチェック（確認日時も取得）
     const { data: ledgerEntries, error: ledgerError } = await supabase
       .from("ledger")
@@ -654,6 +731,10 @@ app.get("/payments", async (req, res) => {
     // 支払いレコードに承認ステータスと確認日時を追加
     const paymentsWithStatus = payments.map((payment) => ({
       ...payment,
+      app_user: {
+        ...payment.app_user,
+        nick_name: nicknames[payment.user_id] || null,
+      },
       isAccepted: confirmedAtMap.has(payment.payment_id),
       confirmedAt: confirmedAtMap.get(payment.payment_id) || null,
     }));
@@ -728,6 +809,10 @@ app.get("/payments/:propertyId", async (req, res) => {
     // 支払いレコードに承認ステータスと確認日時を追加
     const paymentsWithStatus = payments.map((payment) => ({
       ...payment,
+      app_user: {
+        ...payment.app_user,
+        nick_name: nicknames[payment.user_id] || null,
+      },
       isAccepted: confirmedAtMap.has(payment.payment_id),
       confirmedAt: confirmedAtMap.get(payment.payment_id) || null,
     }));
@@ -970,20 +1055,55 @@ app.get("/rent-data", async (req, res) => {
 
     if (userPropsError) throw userPropsError;
 
+    // 3. ニックネームを取得
+    const tenantIds = allUserProperties
+      .filter((up) => up.app_user.user_type === "tenant")
+      .map((up) => up.app_user.user_id);
+
+    console.log("=== DEBUG: Nickname fetching ===");
+    console.log("Tenant IDs:", tenantIds);
+
+    let nicknames = {};
+    if (tenantIds.length > 0) {
+      const { data: ownerTenants, error: nickError } = await supabase
+        .from("owner_tenant")
+        .select("tenant_id, nick_name")
+        .eq("owner_id", userId)
+        .in("tenant_id", tenantIds);
+
+      console.log("Owner tenants query result:", ownerTenants);
+      console.log("Nickname query error:", nickError);
+
+      if (nickError) {
+        console.error("Error fetching nicknames:", nickError);
+      } else {
+        nicknames =
+          ownerTenants?.reduce((acc, ot) => {
+            acc[ot.tenant_id] = ot.nick_name;
+            return acc;
+          }, {}) || {};
+        console.log("Final nicknames object:", nicknames);
+      }
+    }
+
     // テナントのみをフィルタリング（オーナーを除外）
     const tenants = allUserProperties
       .map((up) => ({
         ...up.app_user,
         property_id: up.property_id,
         property_name: up.property.name,
+        nick_name: nicknames[up.app_user.user_id] || null,
       }))
       .filter((user) => user.user_type === "tenant");
+
+    console.log("=== DEBUG: Final tenant data ===");
+    console.log("Tenants with nicknames:", tenants);
 
     console.log(
       `[SECURITY] Found ${tenants.length} tenants across all properties`
     );
 
-    // 3. 全プロパティのテナント家賃データを取得
+    // 4. 全プロパティのテナント家賃データを取得
     const { data: allTenantRents, error: rentsError } = await supabase
       .from("tenant_rent")
       .select("*")
@@ -1047,9 +1167,47 @@ app.get("/rent-data/:propertyId", async (req, res) => {
 
     if (userPropsError) throw userPropsError;
 
+    // ニックネームを取得
+    const tenantIds =
+      userPropertiesForTenants
+        ?.filter((up) => up.app_user.user_type === "tenant")
+        ?.map((up) => up.app_user.user_id) || [];
+
+    console.log("=== DEBUG: Rent data property nickname fetching ===");
+    console.log("Tenant IDs:", tenantIds);
+
+    let nicknames = {};
+    if (tenantIds.length > 0) {
+      const { data: ownerTenants, error: nickError } = await supabase
+        .from("owner_tenant")
+        .select("tenant_id, nick_name")
+        .eq("owner_id", userId)
+        .in("tenant_id", tenantIds);
+
+      console.log("Owner tenants query result:", ownerTenants);
+      console.log("Nickname query error:", nickError);
+
+      if (nickError) {
+        console.error("Error fetching nicknames:", nickError);
+      } else {
+        nicknames =
+          ownerTenants?.reduce((acc, ot) => {
+            acc[ot.tenant_id] = ot.nick_name;
+            return acc;
+          }, {}) || {};
+        console.log("Final nicknames object:", nicknames);
+      }
+    }
+
     const tenants = userPropertiesForTenants
-      .map((up) => up.app_user)
+      .map((up) => ({
+        ...up.app_user,
+        nick_name: nicknames[up.app_user.user_id] || null,
+      }))
       .filter((user) => user.user_type === "tenant");
+
+    console.log("=== DEBUG: Final tenants with nicknames ===");
+    console.log("First tenant:", tenants[0]);
 
     res.json({
       tenants,
@@ -1703,12 +1861,45 @@ app.get("/dashboard", async (req, res) => {
 
     if (userPropsError) throw userPropsError;
 
+    // ニックネームを取得
+    const tenantIds =
+      allUserProperties
+        ?.filter((up) => up.app_user.user_type === "tenant")
+        ?.map((up) => up.app_user.user_id) || [];
+
+    console.log("=== DEBUG: Dashboard nickname fetching ===");
+    console.log("Tenant IDs:", tenantIds);
+
+    let nicknames = {};
+    if (tenantIds.length > 0) {
+      const { data: ownerTenants, error: nickError } = await supabase
+        .from("owner_tenant")
+        .select("tenant_id, nick_name")
+        .eq("owner_id", userId)
+        .in("tenant_id", tenantIds);
+
+      console.log("Owner tenants query result:", ownerTenants);
+      console.log("Nickname query error:", nickError);
+
+      if (nickError) {
+        console.error("Error fetching nicknames:", nickError);
+      } else {
+        nicknames =
+          ownerTenants?.reduce((acc, ot) => {
+            acc[ot.tenant_id] = ot.nick_name;
+            return acc;
+          }, {}) || {};
+        console.log("Final nicknames object:", nicknames);
+      }
+    }
+
     // テナントのみをフィルタリング（オーナーを除外）
     const tenants = allUserProperties
       .map((up) => ({
         ...up.app_user,
         property_id: up.property_id,
         property_name: up.property.name,
+        nick_name: nicknames[up.app_user.user_id] || null,
       }))
       .filter((user) => user.user_type === "tenant");
 
@@ -1741,6 +1932,7 @@ app.get("/dashboard", async (req, res) => {
         user_id: tenant.user_id,
         name: tenant.name,
         email: tenant.email,
+        nick_name: tenant.nick_name,
         current_balance: latestLedger ? latestLedger.amount : 0,
         last_updated: latestLedger ? latestLedger.posted_at : null,
         property_id: tenant.property_id.toString(),
@@ -2338,10 +2530,10 @@ async function calculateBills(
     console.log(`rentDays[${rent.user_id}]: ${rentDays[rent.user_id]}`);
 
     if (rentDays[rent.user_id] && rentDays[rent.user_id] > 0) {
-      // 正しい月の日数計算
-      const year = ms.getFullYear();
-      const month = ms.getMonth();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      // 正しい月の日数計算 - UTCで統一
+      const year = ms.getUTCFullYear();
+      const month = ms.getUTCMonth();
+      const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 
       console.log(
         `Year: ${year}, Month: ${month} (0-based), Days in month: ${daysInMonth}`
@@ -3394,6 +3586,10 @@ app.get("/tenant-payments", async (req, res) => {
         // エラーは無視（レコードが存在しない場合）
         return {
           ...payment,
+          app_user: {
+            ...payment.app_user,
+            nick_name: nicknames[payment.user_id] || null,
+          },
           isAccepted: !!ledgerRecord,
         };
       })
