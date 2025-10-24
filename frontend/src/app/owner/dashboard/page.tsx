@@ -163,9 +163,9 @@ export default function Dashboard() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">
-          Dashboard{selectedProperty ? ` - ${selectedProperty.name}` : ""}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold mb-4">
+          Tenant Balance{selectedProperty ? ` - ${selectedProperty.name}` : ""}
         </h1>
 
         {/* プロパティ選択ドロップダウン */}
