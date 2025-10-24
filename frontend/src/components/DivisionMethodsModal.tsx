@@ -162,31 +162,40 @@ export default function DivisionMethodsModal({
             <>
               {/* 分割方法設定 */}
               <div className="bg-white shadow rounded-lg p-6 mb-8">
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {UTILITIES.map((utility) => (
                     <div
                       key={utility}
-                      className="flex items-center justify-between py-3 border-b border-gray-200 last:border-b-0"
+                      className="py-4 border-b border-gray-200 last:border-b-0"
                     >
-                      <div className="flex-1">
+                      <div className="mb-3">
                         <label className="block text-sm font-medium text-gray-700 capitalize">
                           {utility}
                         </label>
                       </div>
-                      <div className="flex-1 max-w-xs">
-                        <select
-                          value={currentRules[utility] || ""}
-                          onChange={(e) =>
-                            handleMethodChange(utility, e.target.value)
-                          }
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          {DIVISION_METHODS.map((method) => (
-                            <option key={method.value} value={method.value}>
+                      <div className="flex gap-6">
+                        {DIVISION_METHODS.filter(
+                          (method) => method.value !== ""
+                        ).map((method) => (
+                          <label
+                            key={method.value}
+                            className="flex items-center"
+                          >
+                            <input
+                              type="radio"
+                              name={utility}
+                              value={method.value}
+                              checked={currentRules[utility] === method.value}
+                              onChange={(e) =>
+                                handleMethodChange(utility, e.target.value)
+                              }
+                              className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="text-sm text-gray-700">
                               {method.label}
-                            </option>
-                          ))}
-                        </select>
+                            </span>
+                          </label>
+                        ))}
                       </div>
                     </div>
                   ))}
