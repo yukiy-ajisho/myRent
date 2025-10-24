@@ -173,7 +173,84 @@ app.get("/bill-line", async (req, res) => {
   }
 });
 
-// GET /bill-line/:propertyId - 特定プロパティのbill_lineデータを取得
+// GET /user/:userId - ユーザー情報を取得
+app.get("/user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const requestingUserId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${requestingUserId} requesting info for user ${userId}`
+    );
+
+    // セキュリティチェック: リクエストユーザーのプロパティを取得
+    const { data: userProperties, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", requestingUserId);
+
+    console.log(`[DEBUG] Requesting user properties check:`, {
+      userProperties,
+      accessError,
+    });
+
+    if (accessError || !userProperties || userProperties.length === 0) {
+      console.log(
+        `[SECURITY] Access denied for user ${requestingUserId}: no property access`
+      );
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const propertyIds = userProperties.map((up) => up.property_id);
+
+    // 対象ユーザーがリクエストユーザーのいずれかのプロパティにいるかチェック
+    const { data: targetUserProperty, error: targetError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .in("property_id", propertyIds)
+      .single();
+
+    console.log(`[DEBUG] Target user property check:`, {
+      userId,
+      propertyIds,
+      targetUserProperty,
+      targetError,
+    });
+
+    if (targetError || !targetUserProperty) {
+      console.log(
+        `[SECURITY] User ${userId} not found in any of user's properties: ${propertyIds.join(
+          ", "
+        )}`
+      );
+      return res
+        .status(403)
+        .json({ error: "User not found in your properties" });
+    }
+
+    // ユーザー情報を取得
+    const { data: user, error: userError } = await supabase
+      .from("app_user")
+      .select("user_id, name, email")
+      .eq("user_id", userId)
+      .single();
+
+    console.log(`[DEBUG] App user lookup:`, { userId, user, userError });
+
+    if (userError || !user) {
+      console.log(`[SECURITY] User ${userId} not found in app_user table`);
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    console.log(`[SECURITY] User info retrieved for ${userId}: ${user.name}`);
+    res.json(user);
+  } catch (error) {
+    console.error("Get user error:", error);
+    res.status(500).json({ error: "Failed to get user" });
+  }
+});
+
 app.get("/bill-line/:propertyId", async (req, res) => {
   try {
     const { propertyId } = req.params;

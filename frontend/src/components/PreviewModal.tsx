@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, CheckCircle } from "lucide-react";
+import { api } from "@/lib/api";
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -39,8 +40,8 @@ export default function PreviewModal({
   month,
 }: PreviewModalProps) {
   const [isConfirming, setIsConfirming] = useState(false);
-
-  if (!isOpen || !previewData) return null;
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [isLoadingUserNames, setIsLoadingUserNames] = useState(false);
 
   const handleConfirm = async () => {
     setIsConfirming(true);
@@ -64,6 +65,67 @@ export default function PreviewModal({
       month: "long",
     });
   };
+
+  // Fetch user names for all unique user IDs
+  const fetchUserNames = async (userIds: string[]) => {
+    setIsLoadingUserNames(true);
+    try {
+      const names: Record<string, string> = {};
+
+      // Fetch user names in parallel
+      const promises = userIds.map(async (userId) => {
+        try {
+          console.log(`[DEBUG] Fetching user name for: ${userId}`);
+          const response = await api.getUserById(userId);
+          console.log(`[DEBUG] User response for ${userId}:`, response);
+          names[userId] = response.name || `User ${userId.slice(0, 8)}`;
+        } catch (error: any) {
+          console.error(`Failed to fetch user ${userId}:`, error);
+          console.error(`Error details:`, {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+          });
+
+          // より詳細なフォールバック表示
+          if (
+            error.message.includes("Tenant not found") ||
+            error.message.includes("User not found")
+          ) {
+            names[userId] = `Unknown User (${userId.slice(0, 8)})`;
+          } else {
+            names[userId] = `User ${userId.slice(0, 8)}`;
+          }
+        }
+      });
+
+      await Promise.all(promises);
+      setUserNames(names);
+    } catch (error) {
+      console.error("Error fetching user names:", error);
+    } finally {
+      setIsLoadingUserNames(false);
+    }
+  };
+
+  // Fetch user names when previewData changes
+  useEffect(() => {
+    if (previewData?.previewData?.billLines) {
+      const userIds = Array.from(
+        new Set(
+          previewData.previewData.billLines
+            .map((line: unknown) => (line as { user_id: string }).user_id)
+            .filter(Boolean)
+        )
+      );
+
+      if (userIds.length > 0) {
+        fetchUserNames(userIds);
+      }
+    }
+  }, [previewData]);
+
+  if (!isOpen || !previewData) return null;
 
   // Group bill lines by user
   const billLinesByUser =
@@ -141,43 +203,64 @@ export default function PreviewModal({
             Bill Details by Tenant
           </h3>
           <div className="space-y-4">
-            {Object.values(billLinesByUser).map((userData: any) => (
-              <div
-                key={userData.user_id}
-                className="border border-gray-200 rounded-lg p-4"
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="font-medium text-gray-900">
-                    User ID: {userData.user_id}
-                  </h4>
-                  <div className="text-lg font-bold text-gray-900">
-                    {formatCurrency(userData.total)}
+            {Object.values(billLinesByUser).map(
+              (userData: {
+                user_id: string;
+                lines: unknown[];
+                total: number;
+              }) => (
+                <div
+                  key={userData.user_id}
+                  className="border border-gray-200 rounded-lg p-4"
+                >
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-medium text-gray-900">
+                      {isLoadingUserNames ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                          Loading user name...
+                        </div>
+                      ) : (
+                        userNames[userData.user_id] ||
+                        `User ${userData.user_id.slice(0, 8)}`
+                      )}
+                    </h4>
+                    <div className="text-lg font-bold text-gray-900">
+                      {formatCurrency(userData.total)}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {userData.lines.map((line: unknown, index: number) => {
+                      const billLine = line as {
+                        utility: string;
+                        amount: number;
+                        detail_json?: { method: string };
+                      };
+                      return (
+                        <div
+                          key={index}
+                          className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                              {billLine.utility}
+                            </span>
+                            {billLine.detail_json && (
+                              <span className="text-sm text-gray-600">
+                                {billLine.detail_json.method}
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-medium">
+                            {formatCurrency(billLine.amount)}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-                <div className="space-y-2">
-                  {userData.lines.map((line: any, index: number) => (
-                    <div
-                      key={index}
-                      className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
-                          {line.utility}
-                        </span>
-                        {line.detail_json && (
-                          <span className="text-sm text-gray-600">
-                            {line.detail_json.method}
-                          </span>
-                        )}
-                      </div>
-                      <div className="font-medium">
-                        {formatCurrency(line.amount)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
         </div>
 

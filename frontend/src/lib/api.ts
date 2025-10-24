@@ -362,6 +362,11 @@ export const api = {
     return apiRequest(`/latest-bill-run-month/${propertyId}`);
   },
 
+  // Get user by ID
+  getUserById: (userId: string) => {
+    return apiRequest(`/user/${userId}`);
+  },
+
   // Break Period専用のAPI関数
   addBreakPeriod: (data: {
     property_id: string;
