@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, CheckCircle, AlertCircle } from "lucide-react";
+import { X, CheckCircle } from "lucide-react";
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -113,13 +113,7 @@ export default function PreviewModal({
 
         {/* Summary */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
-                {previewData.lines_created || 0}
-              </div>
-              <div className="text-sm text-gray-600">Bill Lines</div>
-            </div>
+          <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
                 {formatCurrency(previewData.totals?.rent || 0)}
@@ -186,35 +180,6 @@ export default function PreviewModal({
             ))}
           </div>
         </div>
-
-        {/* Additional Info */}
-        {previewData.user_days && (
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              User Days & Headcount
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="text-center">
-                <div className="text-xl font-bold text-gray-900">
-                  {previewData.headcount || 0}
-                </div>
-                <div className="text-sm text-gray-600">Headcount</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-gray-900">
-                  {previewData.total_person_days || 0}
-                </div>
-                <div className="text-sm text-gray-600">Total Person Days</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-gray-900">
-                  {Object.keys(previewData.user_days || {}).length}
-                </div>
-                <div className="text-sm text-gray-600">Active Users</div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Actions */}
         <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
