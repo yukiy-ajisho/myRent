@@ -517,7 +517,7 @@ export default function History() {
                             {payment.app_user.nick_name ||
                               payment.app_user.name}
                           </div>
-                          <div className="text-gray-600 text-sm pl-9">
+                          <div className="text-gray-600 text-sm">
                             {payment.app_user.email}
                           </div>
                         </div>
