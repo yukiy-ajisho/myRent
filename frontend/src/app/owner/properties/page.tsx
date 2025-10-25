@@ -85,6 +85,14 @@ export default function Properties() {
   const [selectedTenantForBreak, setSelectedTenantForBreak] =
     useState<Tenant | null>(null);
 
+  // インライン編集管理
+  const [editingTenant, setEditingTenant] = useState<{
+    tenantId: string;
+    propertyId: string;
+  } | null>(null);
+  const [tempStartDate, setTempStartDate] = useState("");
+  const [tempEndDate, setTempEndDate] = useState("");
+
   // プロパティ作成フォーム関連の状態
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -92,6 +100,19 @@ export default function Properties() {
     address: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 日付フォーマット用のヘルパー関数（日付型input用）
+  const formatDateForInput = (dateString: string | null) => {
+    if (!dateString) return "";
+    // YYYY-MM-DD形式をそのまま返す（日付型inputはこの形式を期待）
+    return dateString;
+  };
+
+  const parseDateFromInput = (dateValue: string) => {
+    if (!dateValue) return "";
+    // 日付型inputから取得した値は既にYYYY-MM-DD形式
+    return dateValue;
+  };
 
   // CalculateModalと同じgetNextMonth関数
   const getNextMonth = useCallback((monthString: string) => {
@@ -439,6 +460,86 @@ export default function Properties() {
     setSelectedProperty(null);
   };
 
+  // インライン編集ハンドラー
+  const handleInlineEditClick = (tenant: Tenant, property: Property) => {
+    const stayPeriod = getStayPeriodForTenant(
+      property.property_id,
+      tenant.user_id
+    );
+    setEditingTenant({
+      tenantId: tenant.user_id,
+      propertyId: property.property_id,
+    });
+    setTempStartDate(formatDateForInput(stayPeriod?.start_date || null));
+    setTempEndDate(formatDateForInput(stayPeriod?.end_date || null));
+  };
+
+  // グローバルクリックハンドラー（入力ボックスとSaveボタン以外でキャンセル）
+  useEffect(() => {
+    const handleGlobalClick = (event: MouseEvent) => {
+      if (editingTenant) {
+        const target = event.target as HTMLElement;
+        // 入力ボックスとSaveボタン以外をクリックした場合
+        if (
+          !target.closest('input[type="date"]') &&
+          !target.closest('button[class*="bg-green"]')
+        ) {
+          handleInlineCancel();
+        }
+      }
+    };
+
+    if (editingTenant) {
+      document.addEventListener("click", handleGlobalClick);
+    }
+
+    return () => {
+      document.removeEventListener("click", handleGlobalClick);
+    };
+  }, [editingTenant]);
+
+  const handleInlineSave = async () => {
+    if (!editingTenant) return;
+
+    try {
+      const stayPeriods = [
+        {
+          user_id: editingTenant.tenantId,
+          start_date: tempStartDate ? parseDateFromInput(tempStartDate) : null,
+          end_date: tempEndDate ? parseDateFromInput(tempEndDate) : null,
+        },
+      ];
+
+      await api.saveStayPeriods({
+        propertyId: editingTenant.propertyId,
+        stayPeriods: stayPeriods.reduce((acc, period) => {
+          acc[period.user_id] = {
+            startDate: period.start_date || "",
+            endDate: period.end_date,
+          };
+          return acc;
+        }, {} as Record<string, { startDate: string; endDate: string | null }>),
+        breakPeriods: {},
+      });
+
+      // 編集モードを終了
+      setEditingTenant(null);
+      setTempStartDate("");
+      setTempEndDate("");
+
+      // データを再読み込み
+      loadProperties();
+    } catch (error) {
+      console.error("Error saving stay periods:", error);
+    }
+  };
+
+  const handleInlineCancel = () => {
+    setEditingTenant(null);
+    setTempStartDate("");
+    setTempEndDate("");
+  };
+
   // Stay periods data helper
   const getStayPeriodForTenant = (propertyId: string, userId: string) => {
     const propertyStayPeriods = stayPeriods[propertyId] || [];
@@ -579,27 +680,59 @@ export default function Properties() {
                                     {/* 2. Start Date + End Date + Edit */}
                                     <div className="text-left">
                                       <div className="grid grid-cols-[1.2fr_1fr_0.5fr_1.8fr] gap-0 bg-gray-50 px-3 py-2 rounded">
-                                        <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600">
-                                          {formatDate(
-                                            stayPeriod?.start_date || null
-                                          )}
-                                        </span>
-                                        <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600">
-                                          {formatDate(
-                                            stayPeriod?.end_date || null
-                                          )}
-                                        </span>
-                                        <button
-                                          onClick={() =>
-                                            handleStayPeriodsClick(
-                                              tenant,
-                                              property
-                                            )
-                                          }
-                                          className="px-2 py-1 bg-gray-500 text-white text-xs rounded-full hover:bg-gray-600"
-                                        >
-                                          Edit
-                                        </button>
+                                        {editingTenant?.tenantId ===
+                                          tenant.user_id &&
+                                        editingTenant?.propertyId ===
+                                          property.property_id ? (
+                                          <>
+                                            <input
+                                              type="date"
+                                              value={tempStartDate}
+                                              onChange={(e) =>
+                                                setTempStartDate(e.target.value)
+                                              }
+                                              className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600 border border-gray-300 rounded px-1 py-0.5"
+                                            />
+                                            <input
+                                              type="date"
+                                              value={tempEndDate}
+                                              onChange={(e) =>
+                                                setTempEndDate(e.target.value)
+                                              }
+                                              className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600 border border-gray-300 rounded px-1 py-0.5"
+                                            />
+                                            <button
+                                              onClick={handleInlineSave}
+                                              className="px-2 py-1 bg-green-500 text-white text-xs rounded-full hover:bg-green-600"
+                                            >
+                                              Save
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600">
+                                              {formatDate(
+                                                stayPeriod?.start_date || null
+                                              )}
+                                            </span>
+                                            <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600">
+                                              {formatDate(
+                                                stayPeriod?.end_date || null
+                                              )}
+                                            </span>
+                                            <button
+                                              onClick={() =>
+                                                handleInlineEditClick(
+                                                  tenant,
+                                                  property
+                                                )
+                                              }
+                                              className="px-2 py-1 bg-gray-500 text-white text-xs rounded-full hover:bg-gray-600"
+                                            >
+                                              Edit
+                                            </button>
+                                          </>
+                                        )}
                                       </div>
                                     </div>
 

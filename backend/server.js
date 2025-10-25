@@ -1414,37 +1414,47 @@ app.post("/save-stay-periods", async (req, res) => {
       return res.status(400).json({ error: "Invalid request data" });
     }
 
-    // Delete existing stay records for this property
-    await supabase.from("stay_record").delete().eq("property_id", property_id);
+    // Update or insert stay records for each tenant individually
+    for (const [user_id, period] of Object.entries(stay_periods)) {
+      if (period.startDate) {
+        // Check if stay record already exists for this user and property
+        const { data: existingRecord, error: selectError } = await supabase
+          .from("stay_record")
+          .select("stay_id")
+          .eq("user_id", user_id)
+          .eq("property_id", property_id)
+          .single();
 
-    // Delete existing break records for this property
-    // First get stay_ids for this property, then delete break_records
-    const { data: existingStayRecords } = await supabase
-      .from("stay_record")
-      .select("stay_id")
-      .eq("property_id", property_id);
+        if (selectError && selectError.code !== "PGRST116") {
+          // PGRST116 = no rows found
+          throw selectError;
+        }
 
-    if (existingStayRecords && existingStayRecords.length > 0) {
-      const stayIds = existingStayRecords.map((sr) => sr.stay_id);
-      await supabase.from("break_record").delete().in("stay_id", stayIds);
-    }
+        if (existingRecord) {
+          // Update existing record
+          const { error: updateError } = await supabase
+            .from("stay_record")
+            .update({
+              start_date: period.startDate,
+              end_date: period.endDate || null,
+            })
+            .eq("stay_id", existingRecord.stay_id);
 
-    // Insert new stay records (only if at least start_date is provided)
-    const stayRecords = Object.entries(stay_periods)
-      .filter(([user_id, period]) => period.startDate) // Only include records with start_date
-      .map(([user_id, period]) => ({
-        user_id,
-        property_id: parseInt(property_id),
-        start_date: period.startDate,
-        end_date: period.endDate || null,
-      }));
+          if (updateError) throw updateError;
+        } else {
+          // Insert new record
+          const { error: insertError } = await supabase
+            .from("stay_record")
+            .insert({
+              user_id,
+              property_id: parseInt(property_id),
+              start_date: period.startDate,
+              end_date: period.endDate || null,
+            });
 
-    if (stayRecords.length > 0) {
-      const { error: insertError } = await supabase
-        .from("stay_record")
-        .insert(stayRecords);
-
-      if (insertError) throw insertError;
+          if (insertError) throw insertError;
+        }
+      }
     }
 
     // Insert new break records
