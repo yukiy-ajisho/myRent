@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useProperty, Property } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
+import { User } from "lucide-react";
 
 interface Tenant {
   user_id: string;
@@ -299,61 +300,78 @@ export default function Tenants() {
               </p>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {filteredTenants.map((tenant) => (
-                <div
-                  key={tenant.user_id}
-                  className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-semibold text-gray-900">
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="grid gap-4">
+                {filteredTenants.map((tenant) => (
+                  <div
+                    key={tenant.user_id}
+                    className="bg-gray-50 rounded-lg p-4 shadow-sm"
+                  >
+                    <div className="grid grid-cols-5 gap-0">
+                      {/* 1. Name */}
+                      <div className="text-left py-3">
+                        <div className="text-lg font-semibold text-gray-900">
                           {tenant.nick_name || tenant.name}
-                          {tenant.nick_name && (
-                            <span className="text-sm text-gray-500 ml-2">
-                              ({tenant.name})
-                            </span>
-                          )}
-                        </h3>
-                        <button
-                          onClick={() => handleUpdateNickname(tenant.user_id)}
-                          className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                        >
-                          Update Nick Name
-                        </button>
+                        </div>
+                        {tenant.nick_name && (
+                          <div className="text-sm text-gray-500">
+                            ({tenant.name})
+                          </div>
+                        )}
                       </div>
-                      <p className="text-gray-600 mt-1">{tenant.email}</p>
-                      {tenant.phone_number && (
-                        <p className="text-gray-600 text-sm mt-1">
-                          📞 {tenant.phone_number}
-                        </p>
-                      )}
-                      <div className="mt-2 flex gap-2 flex-wrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          Household Size: {tenant.personal_multiplier}
-                        </span>
+
+                      {/* 2. Email */}
+                      <div className="text-gray-600 py-3 flex items-center">
+                        {tenant.email}
+                      </div>
+
+                      {/* 3. Phone Number */}
+                      <div
+                        className={`text-gray-600 py-3 flex items-center ${
+                          !tenant.phone_number ? "pl-3" : ""
+                        }`}
+                      >
+                        {tenant.phone_number || "--- --- ---"}
+                      </div>
+
+                      {/* 4. Household Size */}
+                      <div className="text-gray-600 py-3 flex items-center">
+                        {Array.from(
+                          { length: tenant.personal_multiplier },
+                          (_, index) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center justify-center w-6 h-6 bg-purple-100 text-purple-800 rounded-full mr-1"
+                            >
+                              <User className="w-3 h-3" />
+                            </span>
+                          )
+                        )}
+                      </div>
+
+                      {/* 5. Property */}
+                      <div className="text-gray-600 py-3 flex items-center">
                         {selectedProperty ? (
-                          // 特定プロパティ選択時は従来通り
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                             {tenant.property_name}
                           </span>
                         ) : (
-                          // All Properties選択時は複数プロパティを横に並べる
-                          tenant.properties.map((property) => (
-                            <span
-                              key={property.property_id}
-                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
-                            >
-                              {property.property_name}
-                            </span>
-                          ))
+                          <div className="flex flex-wrap gap-1">
+                            {tenant.properties.map((property, index) => (
+                              <span
+                                key={property.property_id}
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                              >
+                                {property.property_name}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
