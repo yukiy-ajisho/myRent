@@ -491,7 +491,7 @@ export default function History() {
                 </div>
               ) : (
                 <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                  <div className="grid grid-cols-5 gap-0">
+                  <div className="grid grid-cols-6 gap-0">
                     {/* ヘッダー行 */}
                     <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
                       Name
@@ -505,8 +505,11 @@ export default function History() {
                     <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
                       Confirmation Date
                     </div>
-                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20">
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-24">
                       Amount
+                    </div>
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-28">
+                      Action
                     </div>
 
                     {/* データ行 */}
@@ -538,6 +541,22 @@ export default function History() {
                         </div>
                         <div className="text-2xl font-bold py-3 pl-20">
                           ${payment.amount.toLocaleString()}
+                        </div>
+                        <div className="text-center py-3 pl-6">
+                          {!payment.isAccepted ? (
+                            <button
+                              onClick={() =>
+                                handleAcceptPayment(payment.payment_id)
+                              }
+                              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                            >
+                              Confirm
+                            </button>
+                          ) : (
+                            <span className="text-green-600 text-sm font-medium">
+                              Confirmed
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
