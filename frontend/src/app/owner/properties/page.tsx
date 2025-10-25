@@ -618,7 +618,7 @@ export default function Properties() {
                       </div>
                       <div className="mt-3">
                         {/* 特殊なヘッダーカード */}
-                        <div className="grid grid-cols-[1.1fr_1.5fr_1.2fr_0.7fr] gap-0 bg-white px-3 py-2 rounded mb-2">
+                        <div className="grid grid-cols-[1fr_1.5fr_1.2fr_0.7fr] gap-0 bg-white px-3 py-2 rounded mb-2">
                           {/* 1. Tenant: */}
                           <div className="text-left">
                             <span className="text-sm text-gray-500">
@@ -631,27 +631,29 @@ export default function Properties() {
 
                           {/* 2. Commencement Date + Expiration Date */}
                           <div className="text-left">
-                            <div className="grid grid-cols-[1.2fr_1fr_0.5fr_1.8fr] gap-0 bg-white px-3 py-2 rounded mb-2">
-                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-500">
+                            <div className="grid grid-cols-[1.6fr_1.4fr_0.5fr_1fr] gap-0 bg-white px-3 py-2 rounded mb-2">
+                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-500">
                                 Commencement
                               </span>
-                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-500">
+                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-500">
                                 Expiration
                               </span>
-                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-500"></span>
+                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-500"></span>
                             </div>
                           </div>
 
                           {/* 3. Pause Utility */}
                           <div className="text-left">
-                            <span className="text-sm text-gray-500 pl-8">
+                            <span className="text-sm text-gray-500 pl-16">
                               Pause Utility
                             </span>
                           </div>
 
                           {/* 4. Rent */}
                           <div className="text-left">
-                            <span className="text-sm text-gray-500">Rent</span>
+                            <span className="text-sm text-gray-500 pl-10">
+                              Rent
+                            </span>
                           </div>
                         </div>
                         {rentData[property.property_id]?.tenants?.length > 0 ? (
@@ -679,7 +681,7 @@ export default function Properties() {
 
                                     {/* 2. Start Date + End Date + Edit */}
                                     <div className="text-left">
-                                      <div className="grid grid-cols-[1.2fr_1fr_0.5fr_1.8fr] gap-0 bg-gray-50 px-3 py-2 rounded">
+                                      <div className="grid grid-cols-[1.6fr_1.4fr_0.5fr_1fr] gap-0 bg-gray-50 px-3 py-2 rounded">
                                         {editingTenant?.tenantId ===
                                           tenant.user_id &&
                                         editingTenant?.propertyId ===
@@ -691,7 +693,7 @@ export default function Properties() {
                                               onChange={(e) =>
                                                 setTempStartDate(e.target.value)
                                               }
-                                              className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600 border border-gray-300 rounded px-1 py-0.5"
+                                              className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600 border border-gray-300 rounded px-1 py-0.5"
                                             />
                                             <input
                                               type="date"
@@ -699,7 +701,7 @@ export default function Properties() {
                                               onChange={(e) =>
                                                 setTempEndDate(e.target.value)
                                               }
-                                              className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600 border border-gray-300 rounded px-1 py-0.5"
+                                              className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600 border border-gray-300 rounded px-1 py-0.5"
                                             />
                                             <button
                                               onClick={handleInlineSave}
@@ -710,14 +712,24 @@ export default function Properties() {
                                           </>
                                         ) : (
                                           <>
-                                            <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600">
-                                              {formatDate(
-                                                stayPeriod?.start_date || null
+                                            <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600">
+                                              {stayPeriod?.start_date ? (
+                                                <span className="pl-4">
+                                                  {stayPeriod.start_date}
+                                                </span>
+                                              ) : (
+                                                <span className="pl-9">
+                                                  -----
+                                                </span>
                                               )}
                                             </span>
-                                            <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-[10px] text-gray-600">
-                                              {formatDate(
-                                                stayPeriod?.end_date || null
+                                            <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600">
+                                              {stayPeriod?.end_date ? (
+                                                stayPeriod.end_date
+                                              ) : (
+                                                <span className="pl-5">
+                                                  -----
+                                                </span>
                                               )}
                                             </span>
                                             <button
@@ -738,7 +750,7 @@ export default function Properties() {
 
                                     {/* 3. Edit Button */}
                                     <div className="text-left">
-                                      <div className="pl-8">
+                                      <div className="pl-20">
                                         <button
                                           onClick={() =>
                                             handleBreakClick(tenant, property)
