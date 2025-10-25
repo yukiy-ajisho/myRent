@@ -593,27 +593,27 @@ export default function Properties() {
                           <p className="text-gray-600 mt-1">
                             {property.address}
                           </p>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <button
-                            onClick={() => handleDivisionClick(property)}
-                            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                          >
-                            Split Preference
-                          </button>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-600">
-                              {formatMonthDisplay(
-                                getNextMonthForProperty(property.property_id)
-                              )}
-                            </span>
+                          <div className="mt-2">
                             <button
-                              onClick={() => handleCalculateClick(property)}
-                              className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
+                              onClick={() => handleDivisionClick(property)}
+                              className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
                             >
-                              Calculate
+                              Split Preference
                             </button>
                           </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-600">
+                            {formatMonthDisplay(
+                              getNextMonthForProperty(property.property_id)
+                            )}
+                          </span>
+                          <button
+                            onClick={() => handleCalculateClick(property)}
+                            className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
+                          >
+                            Calculate
+                          </button>
                         </div>
                       </div>
                       <div className="mt-3">
