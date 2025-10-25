@@ -618,7 +618,7 @@ export default function Properties() {
                       </div>
                       <div className="mt-3">
                         {/* 特殊なヘッダーカード */}
-                        <div className="grid grid-cols-[1.1fr_1.5fr_1.2fr_0.7fr] gap-0 bg-white px-3 py-2 rounded mb-2">
+                        <div className="grid grid-cols-[0.7fr_2.1fr_1fr_0.7fr] gap-0 bg-white px-3 py-2 rounded mb-2">
                           {/* 1. Tenant: */}
                           <div className="text-left">
                             <span className="text-sm text-gray-500">
@@ -631,14 +631,14 @@ export default function Properties() {
 
                           {/* 2. Commencement Date + Expiration Date */}
                           <div className="text-left">
-                            <div className="grid grid-cols-[1.6fr_1.4fr_0.5fr_1fr] gap-0 bg-white px-3 py-2 rounded mb-2">
-                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-500">
+                            <div className="grid grid-cols-[1.8fr_1.6fr_0.5fr_0.6fr] gap-0 bg-white px-3 py-2 rounded mb-2">
+                              <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-500">
                                 Commencement
                               </span>
-                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-500">
+                              <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-500">
                                 Expiration
                               </span>
-                              <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-500"></span>
+                              <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-500"></span>
                             </div>
                           </div>
 
@@ -667,7 +667,7 @@ export default function Properties() {
                                 return (
                                   <div
                                     key={tenant.user_id}
-                                    className="grid grid-cols-[1.1fr_1.5fr_1.2fr_0.7fr] gap-0 bg-gray-50 px-3 py-2 rounded"
+                                    className="grid grid-cols-[0.7fr_2.1fr_1fr_0.7fr] gap-0 bg-gray-50 px-3 py-2 rounded"
                                   >
                                     {/* 1. Name + Email */}
                                     <div className="text-left">
@@ -681,7 +681,7 @@ export default function Properties() {
 
                                     {/* 2. Start Date + End Date + Edit */}
                                     <div className="text-left">
-                                      <div className="grid grid-cols-[1.6fr_1.4fr_0.5fr_1fr] gap-0 bg-gray-50 px-3 py-2 rounded">
+                                      <div className="grid grid-cols-[1.8fr_1.6fr_0.5fr_0.6fr] gap-0 bg-gray-50 px-3 py-2 rounded">
                                         {editingTenant?.tenantId ===
                                           tenant.user_id &&
                                         editingTenant?.propertyId ===
@@ -712,7 +712,7 @@ export default function Properties() {
                                           </>
                                         ) : (
                                           <>
-                                            <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600">
+                                            <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-600">
                                               {stayPeriod?.start_date ? (
                                                 <span className="pl-4">
                                                   {stayPeriod.start_date}
@@ -723,7 +723,7 @@ export default function Properties() {
                                                 </span>
                                               )}
                                             </span>
-                                            <span className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600">
+                                            <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-600">
                                               {stayPeriod?.end_date ? (
                                                 stayPeriod.end_date
                                               ) : (
