@@ -16,17 +16,32 @@ const supabase = createClient(
 );
 
 // Middleware
-app.use(
-  cors({
-    origin: [
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
       "http://localhost:3000",
       "http://localhost:3001",
-      "https://*.vercel.app",
+      "https://my-rent.vercel.app",
       process.env.FRONTEND_URL,
-    ].filter(Boolean),
-    credentials: true,
-  })
-);
+    ].filter(Boolean);
+    
+    // Check if origin is allowed
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // JWT verification middleware
