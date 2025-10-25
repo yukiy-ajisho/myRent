@@ -670,7 +670,7 @@ export default function Properties() {
                                     className="grid grid-cols-[0.7fr_2.1fr_1fr_0.7fr] gap-0 bg-gray-50 px-3 py-2 rounded"
                                   >
                                     {/* 1. Name + Email */}
-                                    <div className="text-left">
+                                    <div className="text-left overflow-hidden">
                                       <div className="text-sm font-medium text-gray-900">
                                         {tenant.nick_name || tenant.name}
                                       </div>
@@ -680,7 +680,7 @@ export default function Properties() {
                                     </div>
 
                                     {/* 2. Start Date + End Date + Edit */}
-                                    <div className="text-left">
+                                    <div className="text-left overflow-hidden">
                                       <div className="grid grid-cols-[1.8fr_1.6fr_0.5fr_0.6fr] gap-0 bg-gray-50 px-3 py-2 rounded">
                                         {editingTenant?.tenantId ===
                                           tenant.user_id &&
@@ -749,7 +749,7 @@ export default function Properties() {
                                     </div>
 
                                     {/* 3. Edit Button */}
-                                    <div className="text-left">
+                                    <div className="text-left overflow-hidden">
                                       <div className="pl-20">
                                         <button
                                           onClick={() =>
@@ -763,7 +763,7 @@ export default function Properties() {
                                     </div>
 
                                     {/* 4. Rent Input */}
-                                    <div className="text-left">
+                                    <div className="text-left overflow-hidden">
                                       <div className="flex items-center">
                                         <span className="text-sm text-gray-700 mr-2">
                                           $

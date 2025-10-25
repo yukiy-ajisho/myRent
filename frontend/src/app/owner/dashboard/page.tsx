@@ -217,13 +217,13 @@ export default function Dashboard() {
                 <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
                   Property
                 </div>
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
                   Email
                 </div>
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20">
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20 overflow-hidden">
                   Last Updated
                 </div>
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-40">
+                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-40 overflow-hidden">
                   Balance
                 </div>
 
@@ -239,14 +239,14 @@ export default function Dashboard() {
                     <div className="text-gray-600 py-3">
                       {tenant.property_name}
                     </div>
-                    <div className="text-gray-600 py-3 pl-15">
+                    <div className="text-gray-600 py-3 pl-15 overflow-hidden">
                       {tenant.email}
                     </div>
-                    <div className="text-sm text-gray-500 py-3 pl-20">
+                    <div className="text-sm text-gray-500 py-3 pl-20 overflow-hidden">
                       {formatDate(tenant.last_updated)}
                     </div>
                     <div
-                      className={`text-2xl font-bold py-3 pl-40 ${getBalanceColor(
+                      className={`text-2xl font-bold py-3 pl-36 overflow-hidden ${getBalanceColor(
                         tenant.current_balance
                       )}`}
                     >
