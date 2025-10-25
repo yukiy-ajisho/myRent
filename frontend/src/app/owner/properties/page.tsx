@@ -618,7 +618,7 @@ export default function Properties() {
                       </div>
                       <div className="mt-3">
                         {/* 特殊なヘッダーカード */}
-                        <div className="grid grid-cols-[1fr_1.5fr_1.2fr_0.7fr] gap-0 bg-white px-3 py-2 rounded mb-2">
+                        <div className="grid grid-cols-[1.1fr_1.5fr_1.2fr_0.7fr] gap-0 bg-white px-3 py-2 rounded mb-2">
                           {/* 1. Tenant: */}
                           <div className="text-left">
                             <span className="text-sm text-gray-500">
