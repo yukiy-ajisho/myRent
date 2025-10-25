@@ -1395,6 +1395,10 @@ app.post("/save-stay-periods", async (req, res) => {
       `[SECURITY] User ${userId} saving stay periods for property ${property_id}`
     );
 
+    console.log("=== DEBUG: save-stay-periods ===");
+    console.log("property_id:", property_id, "type:", typeof property_id);
+    console.log("stay_periods:", stay_periods);
+
     // ← ADD AUTHORIZATION CHECK
     const { data: userProperty, error: accessError } = await supabase
       .from("user_property")
@@ -1418,11 +1422,16 @@ app.post("/save-stay-periods", async (req, res) => {
     for (const [user_id, period] of Object.entries(stay_periods)) {
       if (period.startDate) {
         // Check if stay record already exists for this user and property
+        const propertyIdInt = parseInt(property_id);
+        if (isNaN(propertyIdInt)) {
+          throw new Error(`Invalid property_id: ${property_id}`);
+        }
+
         const { data: existingRecord, error: selectError } = await supabase
           .from("stay_record")
           .select("stay_id")
           .eq("user_id", user_id)
-          .eq("property_id", property_id)
+          .eq("property_id", propertyIdInt)
           .single();
 
         if (selectError && selectError.code !== "PGRST116") {
@@ -1447,7 +1456,7 @@ app.post("/save-stay-periods", async (req, res) => {
             .from("stay_record")
             .insert({
               user_id,
-              property_id: parseInt(property_id),
+              property_id: propertyIdInt,
               start_date: period.startDate,
               end_date: period.endDate || null,
             });
@@ -1504,9 +1513,14 @@ app.post("/save-stay-periods", async (req, res) => {
       `[SECURITY] Stay periods saved successfully for property ${property_id}`
     );
 
+    // Count saved records
+    const savedStayRecordsCount = Object.values(stay_periods).filter(
+      (period) => period.startDate
+    ).length;
+
     res.json({
       ok: true,
-      stay_records_saved: stayRecords.length,
+      stay_records_saved: savedStayRecordsCount,
       break_records_saved: break_periods
         ? Object.values(break_periods).flat().length
         : 0,
