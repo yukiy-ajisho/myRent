@@ -3616,7 +3616,6 @@ app.get("/tenant-payments", async (req, res) => {
           ...payment,
           app_user: {
             ...payment.app_user,
-            nick_name: nicknames[payment.user_id] || null,
           },
           isAccepted: !!ledgerRecord,
         };
