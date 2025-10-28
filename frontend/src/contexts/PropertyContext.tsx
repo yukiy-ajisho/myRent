@@ -5,6 +5,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { api } from "@/lib/api";
@@ -40,25 +41,33 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   // プロパティ一覧を取得する関数
-  const fetchProperties = async () => {
+  const fetchProperties = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await api.getUserProperties();
       // APIレスポンスの構造に合わせて調整
-      const properties = data.properties.map((item: any) => item.property);
+      const properties = data.properties.map(
+        (item: { property: Property }) => item.property
+      );
       setUserProperties(properties);
       console.log("Fetched user properties:", properties);
 
-      // 最初のプロパティを選択
+      // 最初のプロパティを選択（初回ロード時のみ）
       if (properties.length > 0 && !selectedProperty) {
+        console.log("PropertyContext: Auto-selecting first property");
         setSelectedProperty(properties[0]);
+      } else if (selectedProperty) {
+        console.log(
+          "PropertyContext: Keeping existing selection:",
+          selectedProperty.name
+        );
       }
     } catch (error) {
       console.error("Failed to fetch properties:", error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedProperty]);
 
   // プロパティを再取得する関数
   const refreshProperties = async () => {
@@ -68,7 +77,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
   // コンポーネントマウント時にプロパティを取得
   useEffect(() => {
     fetchProperties();
-  }, []);
+  }, [fetchProperties]);
 
   const value: PropertyContextType = {
     selectedProperty,

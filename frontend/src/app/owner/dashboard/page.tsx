@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useProperty, Property } from "@/contexts/PropertyContext";
+import { useState, useEffect, useMemo } from "react";
+import { useProperty } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
 import { getAuthState } from "@/lib/auth-state-client";
 import { useRouter } from "next/navigation";
@@ -16,6 +16,8 @@ interface DashboardTenant {
   last_updated: string | null;
   property_id: string;
   property_name: string;
+  loan_balance: number;
+  loan_last_updated: string | null;
 }
 
 export default function Dashboard() {
@@ -32,7 +34,7 @@ export default function Dashboard() {
   const router = useRouter();
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuthAndFetchData = async () => {
       try {
         const { state, user } = await getAuthState();
 
@@ -53,6 +55,36 @@ export default function Dashboard() {
           }
 
           setAuthState("allowed");
+
+          // Authが成功したらデータを取得
+          try {
+            setIsLoading(true);
+            setMessage("");
+
+            console.log("=== DASHBOARD DEBUG ===");
+            console.log("Fetching all dashboard data...");
+
+            const data = await api.getAllDashboardData();
+            console.log("API Response received:", data);
+
+            const tenants = data.tenants || [];
+            console.log("All dashboard tenants from API:", tenants);
+
+            console.log(
+              "Setting dashboard data, tenant count:",
+              tenants.length
+            );
+            setAllDashboardData(tenants);
+            console.log(
+              "Dashboard data set, selectedProperty:",
+              selectedProperty
+            );
+          } catch (error) {
+            console.error("Error loading dashboard data:", error);
+            setMessage("Error loading dashboard data");
+          } finally {
+            setIsLoading(false);
+          }
         }
       } catch (error) {
         console.error("Error checking auth state:", error);
@@ -60,38 +92,8 @@ export default function Dashboard() {
       }
     };
 
-    checkAuth();
+    checkAuthAndFetchData();
   }, [router]);
-
-  // 初期データ読み込み
-  useEffect(() => {
-    if (authState === "allowed") {
-      fetchAllDashboardData();
-    }
-  }, [authState]);
-
-  const fetchAllDashboardData = async () => {
-    try {
-      setIsLoading(true);
-      setMessage("");
-
-      console.log("=== DASHBOARD DEBUG ===");
-      console.log("Fetching all dashboard data...");
-
-      const data = await api.getAllDashboardData();
-      console.log("API Response received:", data);
-
-      const tenants = data.tenants || [];
-      console.log("All dashboard tenants from API:", tenants);
-
-      setAllDashboardData(tenants);
-    } catch (error) {
-      console.error("Error loading dashboard data:", error);
-      setMessage("Error loading dashboard data");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // プロパティ選択変更
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -99,9 +101,7 @@ export default function Dashboard() {
     if (propertyId === "") {
       setSelectedProperty(null);
     } else {
-      const property = userProperties.find(
-        (p) => p.property_id === parseInt(propertyId)
-      );
+      const property = userProperties.find((p) => p.property_id === propertyId);
       setSelectedProperty(property || null);
     }
   };
@@ -110,9 +110,33 @@ export default function Dashboard() {
   const filteredDashboardData = selectedProperty
     ? allDashboardData.filter(
         (tenant) =>
-          tenant.property_id === selectedProperty.property_id.toString()
+          tenant.property_id.toString() ===
+          selectedProperty.property_id.toString()
       )
     : allDashboardData;
+
+  // Get unique tenants with latest loan data
+  const uniqueLoanTenants = useMemo(() => {
+    if (!filteredDashboardData || filteredDashboardData.length === 0) return [];
+
+    const tenantMap = new Map<string, DashboardTenant>();
+
+    filteredDashboardData.forEach((tenant) => {
+      const existing = tenantMap.get(tenant.user_id);
+
+      if (
+        !existing ||
+        (tenant.loan_last_updated &&
+          existing.loan_last_updated &&
+          new Date(tenant.loan_last_updated) >
+            new Date(existing.loan_last_updated))
+      ) {
+        tenantMap.set(tenant.user_id, tenant);
+      }
+    });
+
+    return Array.from(tenantMap.values());
+  }, [filteredDashboardData]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -138,12 +162,6 @@ export default function Dashboard() {
     return "text-gray-600";
   };
 
-  const getBalanceBgColor = (balance: number) => {
-    if (balance > 0) return "bg-green-50 border-green-200";
-    if (balance < 0) return "bg-red-50 border-red-200";
-    return "bg-gray-50 border-gray-200";
-  };
-
   if (authState === "checking") {
     return (
       <div className="p-6">
@@ -161,33 +179,27 @@ export default function Dashboard() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-4">
-          Tenant Balance{selectedProperty ? ` - ${selectedProperty.name}` : ""}
-        </h1>
-
-        {/* プロパティ選択ドロップダウン */}
-        <div className="flex items-center gap-2">
-          <label
-            htmlFor="property-select"
-            className="text-sm font-medium text-gray-700"
-          >
-            Property:
-          </label>
-          <select
-            id="property-select"
-            value={selectedProperty?.property_id || ""}
-            onChange={handlePropertyChange}
-            className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">All Properties</option>
-            {userProperties.map((property) => (
-              <option key={property.property_id} value={property.property_id}>
-                {property.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Property選択を最上部に */}
+      <div className="flex items-center gap-2 mb-6">
+        <label
+          htmlFor="property-select"
+          className="text-sm font-medium text-gray-700"
+        >
+          Property:
+        </label>
+        <select
+          id="property-select"
+          value={selectedProperty?.property_id || ""}
+          onChange={handlePropertyChange}
+          className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="">All Properties</option>
+          {userProperties.map((property) => (
+            <option key={property.property_id} value={property.property_id}>
+              {property.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {isLoading ? (
@@ -208,53 +220,106 @@ export default function Dashboard() {
               </p>
             </div>
           ) : (
-            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-              <div className="grid grid-cols-5 gap-0">
-                {/* ヘッダー行 */}
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
-                  Name
-                </div>
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
-                  Property
-                </div>
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-                  Email
-                </div>
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20 overflow-hidden">
-                  Last Updated
-                </div>
-                <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-40 overflow-hidden">
-                  Balance
-                </div>
+            /* Tenant BalanceとTenant Loan Balanceを横並び */
+            <div className="grid grid-cols-2 gap-6 items-start">
+              {/* Tenant Balance */}
+              <div className="h-full">
+                <h2 className="text-2xl font-bold mb-4">
+                  Tenant Balance
+                  {selectedProperty ? ` - ${selectedProperty.name}` : ""}
+                </h2>
+                <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm h-full">
+                  <div className="grid grid-cols-4 gap-0">
+                    {/* ヘッダー行 */}
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 col-span-2">
+                      Name
+                    </div>
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-8 overflow-hidden">
+                      Last Updated
+                    </div>
+                    <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-16 overflow-hidden">
+                      Balance
+                    </div>
 
-                {/* データ行 */}
-                {filteredDashboardData.map((tenant) => (
-                  <div
-                    key={`${tenant.user_id}-${tenant.property_id}`}
-                    className="contents"
-                  >
-                    <div className="text-lg font-semibold text-gray-900 py-3">
-                      {tenant.nick_name || tenant.name}
-                    </div>
-                    <div className="text-gray-600 py-3">
-                      {tenant.property_name}
-                    </div>
-                    <div className="text-gray-600 py-3 pl-15 overflow-hidden">
-                      {tenant.email}
-                    </div>
-                    <div className="text-sm text-gray-500 py-3 pl-20 overflow-hidden">
-                      {formatDate(tenant.last_updated)}
-                    </div>
-                    <div
-                      className={`text-2xl font-bold py-3 pl-36 overflow-hidden ${getBalanceColor(
-                        tenant.current_balance
-                      )}`}
-                    >
-                      {formatCurrency(tenant.current_balance)}
+                    {/* データ行 */}
+                    {filteredDashboardData.map((tenant) => (
+                      <div
+                        key={`${tenant.user_id}-${tenant.property_id}`}
+                        className="contents"
+                      >
+                        <div className="col-span-2 py-3">
+                          <div className="text-lg font-semibold text-gray-900">
+                            {tenant.nick_name || tenant.name}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {tenant.email}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {tenant.property_name}
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-500 py-3 pl-8 overflow-hidden">
+                          {formatDate(tenant.last_updated)}
+                        </div>
+                        <div
+                          className={`text-2xl font-bold py-3 pl-16 overflow-hidden ${getBalanceColor(
+                            tenant.current_balance
+                          )}`}
+                        >
+                          {formatCurrency(tenant.current_balance)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tenant Loan Balance */}
+              {!isLoading && uniqueLoanTenants.length > 0 && (
+                <div className="h-full">
+                  <h2 className="text-2xl font-bold mb-4">
+                    Tenant Loan Balance
+                  </h2>
+                  <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm h-full">
+                    <div className="grid grid-cols-3 gap-0">
+                      {/* ヘッダー行 */}
+                      <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+                        Name
+                      </div>
+                      <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-8 overflow-hidden">
+                        Last Updated
+                      </div>
+                      <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-16 overflow-hidden">
+                        Loan Balance
+                      </div>
+
+                      {/* データ行 */}
+                      {uniqueLoanTenants.map((tenant) => (
+                        <div key={tenant.user_id} className="contents">
+                          <div className="py-3">
+                            <div className="text-lg font-semibold text-gray-900">
+                              {tenant.nick_name || tenant.name}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {tenant.email}
+                            </div>
+                          </div>
+                          <div className="text-sm text-gray-500 py-3 pl-8 overflow-hidden">
+                            {formatDate(tenant.loan_last_updated)}
+                          </div>
+                          <div
+                            className={`text-2xl font-bold py-3 pl-16 overflow-hidden ${getBalanceColor(
+                              tenant.loan_balance
+                            )}`}
+                          >
+                            {formatCurrency(tenant.loan_balance)}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>

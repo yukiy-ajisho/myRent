@@ -1988,6 +1988,23 @@ app.get("/dashboard", async (req, res) => {
         continue;
       }
 
+      // Get latest loan_ledger record for this owner-tenant pair
+      const { data: latestLoanLedger, error: loanLedgerError } = await supabase
+        .from("loan_ledger")
+        .select("amount, created_at")
+        .eq("owner_user_id", userId)
+        .eq("tenant_user_id", tenant.user_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (loanLedgerError && loanLedgerError.code !== "PGRST116") {
+        console.error(
+          `Error fetching loan_ledger for tenant ${tenant.user_id}:`,
+          loanLedgerError
+        );
+      }
+
       dashboardData.push({
         user_id: tenant.user_id,
         name: tenant.name,
@@ -1997,6 +2014,10 @@ app.get("/dashboard", async (req, res) => {
         last_updated: latestLedger ? latestLedger.posted_at : null,
         property_id: tenant.property_id.toString(),
         property_name: tenant.property_name,
+        loan_balance: latestLoanLedger ? latestLoanLedger.amount : 0,
+        loan_last_updated: latestLoanLedger
+          ? latestLoanLedger.created_at
+          : null,
       });
     }
 
