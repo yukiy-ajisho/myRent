@@ -391,6 +391,10 @@ export const api = {
     return apiRequest("/loans");
   },
 
+  getTenantLoans: () => {
+    return apiRequest("/tenant/loans");
+  },
+
   createLoan: (data: {
     tenant_user_id: string;
     amount: number;

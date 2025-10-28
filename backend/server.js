@@ -4359,6 +4359,50 @@ app.put("/loans/:loanId/confirm", async (req, res) => {
   }
 });
 
+// GET /tenant/loans - Get all loans for the current tenant
+app.get("/tenant/loans", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting tenant loans`);
+
+    // Get all loans where this user is the tenant
+    const { data: loans, error } = await supabase
+      .from("loan")
+      .select(
+        `
+        loan_id,
+        owner_user_id,
+        tenant_user_id,
+        amount,
+        status,
+        note,
+        created_date,
+        paid_date,
+        confirmed_date,
+        owner:owner_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .eq("tenant_user_id", userId)
+      .order("created_date", { ascending: false });
+
+    if (error) throw error;
+
+    console.log(
+      `[SECURITY] Found ${loans?.length || 0} loans for tenant ${userId}`
+    );
+
+    res.json({ loans: loans || [] });
+  } catch (error) {
+    console.error("Get tenant loans error:", error);
+    res.status(500).json({ error: "Failed to fetch tenant loans" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
