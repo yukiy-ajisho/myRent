@@ -99,9 +99,7 @@ export default function Loan() {
 
       {/* Loans Section */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mb-8">
-        <h2 className="text-xl font-bold mb-4 text-gray-800">
-          Loans (What I Owe)
-        </h2>
+        <h2 className="text-xl font-bold mb-4 text-gray-800">Loans</h2>
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading loans...</div>
         ) : loans.length === 0 ? (

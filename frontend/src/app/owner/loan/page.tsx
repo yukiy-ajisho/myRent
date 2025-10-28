@@ -9,11 +9,8 @@ interface Loan {
   owner_user_id: string;
   tenant_user_id: string;
   amount: number;
-  status: "pending" | "paid" | "confirmed";
   note?: string | null;
   created_date: string;
-  paid_date?: string | null;
-  confirmed_date?: string | null;
   tenant?: {
     user_id: string;
     name: string;
@@ -243,108 +240,51 @@ export default function Loan() {
         ) : filteredLoans.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No loans found</div>
         ) : (
-          <div className="grid grid-cols-8 gap-0">
-            {/* Header row */}
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Tenant
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Status
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Created Date
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Paid Date
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Confirmed Date
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Note
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Amount
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Action
-            </div>
-
-            {/* Data rows */}
-            {filteredLoans.map((loan) => (
-              <div key={loan.loan_id} className="contents">
-                <div className="py-3 overflow-hidden">
-                  <div className="text-lg font-semibold text-gray-900">
-                    {loan.tenant?.name || "Unknown"}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    {loan.tenant?.email || "N/A"}
-                  </div>
-                </div>
-                <div
-                  className={`py-3 overflow-hidden ${
-                    loan.status === "confirmed"
-                      ? "text-green-600"
-                      : loan.status === "paid"
-                      ? "text-yellow-600"
-                      : "text-orange-600"
-                  }`}
-                >
-                  {loan.status}
-                </div>
-                <div className="text-sm text-gray-500 py-3 overflow-hidden pl-4">
-                  {new Date(loan.created_date).toLocaleDateString()}
-                </div>
-                <div
-                  className={`text-sm text-gray-500 py-3 overflow-hidden ${
-                    !loan.paid_date ? "pl-3" : ""
-                  }`}
-                >
-                  {loan.paid_date
-                    ? new Date(loan.paid_date).toLocaleDateString()
-                    : "--/--/--"}
-                </div>
-                <div
-                  className={`text-sm text-gray-500 py-3 overflow-hidden ${
-                    loan.confirmed_date ? "pl-5" : "pl-8"
-                  }`}
-                >
-                  {loan.confirmed_date
-                    ? new Date(loan.confirmed_date).toLocaleDateString()
-                    : "--/--/--"}
-                </div>
-                <div className="text-sm text-gray-500 py-3 overflow-hidden">
-                  {loan.note || "—"}
-                </div>
-                <div
-                  className={`py-3 overflow-hidden ${
-                    loan.status === "pending"
-                      ? "text-orange-600 font-semibold"
-                      : "text-gray-600"
-                  }`}
-                >
-                  ${loan.amount.toFixed(2)}
-                </div>
-                <div className="py-3 overflow-hidden">
-                  {loan.status === "paid" && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await api.confirmLoan(loan.loan_id);
-                          fetchLoans();
-                        } catch (error) {
-                          console.error("Error confirming loan:", error);
-                          alert("Failed to confirm loan");
-                        }
-                      }}
-                      className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
-                    >
-                      Confirm
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Tenant
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Amount
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Created Date
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Note
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLoans.map((loan) => (
+                  <tr
+                    key={loan.loan_id}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-gray-900">
+                        {loan.tenant?.name || "Unknown"}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {loan.tenant?.email || "N/A"}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-gray-900 font-semibold">
+                      ${loan.amount.toFixed(2)}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {new Date(loan.created_date).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {loan.note || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
