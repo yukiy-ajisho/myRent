@@ -4712,6 +4712,120 @@ app.put("/repayments/:repaymentId/confirm", async (req, res) => {
   }
 });
 
+// POST /owner/process-repayments - Batch process confirmed repayments
+app.post("/owner/process-repayments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} processing confirmed repayments`);
+
+    // Get all confirmed, unprocessed repayments for this owner
+    const { data: repayments, error: repaymentsError } = await supabase
+      .from("repayment")
+      .select("*")
+      .eq("owner_user_id", userId)
+      .eq("status", "confirmed")
+      .eq("processed", false)
+      .order("repayment_date", { ascending: true });
+
+    if (repaymentsError) throw repaymentsError;
+
+    if (!repayments || repayments.length === 0) {
+      console.log(`[SECURITY] No repayments to process for owner ${userId}`);
+      return res.json({ success: true, processedCount: 0 });
+    }
+
+    console.log(
+      `[SECURITY] Processing ${repayments.length} repayments for owner ${userId}`
+    );
+
+    let processedCount = 0;
+
+    // Process each repayment
+    for (const repayment of repayments) {
+      try {
+        // Get latest balance from loan_ledger for this owner-tenant pair
+        const { data: latestRecord, error: ledgerError } = await supabase
+          .from("loan_ledger")
+          .select("amount")
+          .eq("owner_user_id", repayment.owner_user_id)
+          .eq("tenant_user_id", repayment.tenant_user_id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (ledgerError) {
+          console.error(
+            `Error fetching ledger for repayment ${repayment.repayment_id}:`,
+            ledgerError
+          );
+          continue;
+        }
+
+        const previousBalance = latestRecord?.[0]?.amount || 0;
+        const newBalance = previousBalance - repayment.amount;
+
+        console.log(
+          `Processing repayment ${repayment.repayment_id}: ${previousBalance} - ${repayment.amount} = ${newBalance}`
+        );
+
+        // Create loan_ledger record
+        const { error: insertError } = await supabase
+          .from("loan_ledger")
+          .insert({
+            loan_id: repayment.repayment_id,
+            owner_user_id: repayment.owner_user_id,
+            tenant_user_id: repayment.tenant_user_id,
+            source_type: "payment",
+            amount: newBalance,
+            created_at: repayment.confirmed_date || new Date().toISOString(),
+          });
+
+        if (insertError) {
+          console.error(
+            `Error creating ledger for repayment ${repayment.repayment_id}:`,
+            insertError
+          );
+          continue;
+        }
+
+        // Mark repayment as processed
+        const { error: updateError } = await supabase
+          .from("repayment")
+          .update({ processed: true })
+          .eq("repayment_id", repayment.repayment_id);
+
+        if (updateError) {
+          console.error(
+            `Error marking repayment ${repayment.repayment_id} as processed:`,
+            updateError
+          );
+          continue;
+        }
+
+        processedCount++;
+        console.log(
+          `[SECURITY] Repayment ${repayment.repayment_id} processed successfully`
+        );
+      } catch (error) {
+        console.error(
+          `Error processing repayment ${repayment.repayment_id}:`,
+          error
+        );
+        continue;
+      }
+    }
+
+    console.log(
+      `[SECURITY] Successfully processed ${processedCount} out of ${repayments.length} repayments`
+    );
+
+    res.json({ success: true, processedCount: processedCount });
+  } catch (error) {
+    console.error("Process repayments error:", error);
+    res.status(500).json({ error: "Failed to process repayments" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
