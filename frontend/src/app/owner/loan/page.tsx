@@ -178,16 +178,10 @@ export default function Loan() {
         ) : filteredLoans.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No loans found</div>
         ) : (
-          <div className="grid grid-cols-9 gap-0">
+          <div className="grid grid-cols-8 gap-0">
             {/* Header row */}
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
               Tenant
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Email
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Amount
             </div>
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
               Status
@@ -205,20 +199,22 @@ export default function Loan() {
               Note
             </div>
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
+              Amount
+            </div>
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
               Action
             </div>
 
             {/* Data rows */}
             {filteredLoans.map((loan) => (
               <div key={loan.loan_id} className="contents">
-                <div className="text-gray-900 py-3 overflow-hidden">
-                  {loan.tenant?.name || "Unknown"}
-                </div>
-                <div className="text-gray-600 py-3 overflow-hidden">
-                  {loan.tenant?.email || "N/A"}
-                </div>
-                <div className="text-gray-600 py-3 overflow-hidden">
-                  ${loan.amount.toFixed(2)}
+                <div className="py-3 overflow-hidden">
+                  <div className="text-lg font-semibold text-gray-900">
+                    {loan.tenant?.name || "Unknown"}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {loan.tenant?.email || "N/A"}
+                  </div>
                 </div>
                 <div
                   className={`py-3 overflow-hidden ${
@@ -226,26 +222,43 @@ export default function Loan() {
                       ? "text-green-600"
                       : loan.status === "paid"
                       ? "text-yellow-600"
-                      : "text-gray-600"
+                      : "text-orange-600"
                   }`}
                 >
                   {loan.status}
                 </div>
-                <div className="text-sm text-gray-500 py-3 overflow-hidden">
+                <div className="text-sm text-gray-500 py-3 overflow-hidden pl-4">
                   {new Date(loan.created_date).toLocaleDateString()}
                 </div>
-                <div className="text-sm text-gray-500 py-3 overflow-hidden">
+                <div
+                  className={`text-sm text-gray-500 py-3 overflow-hidden ${
+                    !loan.paid_date ? "pl-3" : ""
+                  }`}
+                >
                   {loan.paid_date
                     ? new Date(loan.paid_date).toLocaleDateString()
-                    : "—"}
+                    : "--/--/--"}
                 </div>
-                <div className="text-sm text-gray-500 py-3 overflow-hidden">
+                <div
+                  className={`text-sm text-gray-500 py-3 overflow-hidden ${
+                    loan.confirmed_date ? "pl-5" : "pl-8"
+                  }`}
+                >
                   {loan.confirmed_date
                     ? new Date(loan.confirmed_date).toLocaleDateString()
-                    : "—"}
+                    : "--/--/--"}
                 </div>
                 <div className="text-sm text-gray-500 py-3 overflow-hidden">
                   {loan.note || "—"}
+                </div>
+                <div
+                  className={`py-3 overflow-hidden ${
+                    loan.status === "pending"
+                      ? "text-orange-600 font-semibold"
+                      : "text-gray-600"
+                  }`}
+                >
+                  ${loan.amount.toFixed(2)}
                 </div>
                 <div className="py-3 overflow-hidden">
                   {loan.status === "paid" && (
