@@ -47,6 +47,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
       // APIレスポンスの構造に合わせて調整
       const properties = data.properties.map((item: any) => item.property);
       setUserProperties(properties);
+      console.log("Fetched user properties:", properties);
 
       // 最初のプロパティを選択
       if (properties.length > 0 && !selectedProperty) {

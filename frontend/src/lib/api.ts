@@ -385,4 +385,38 @@ export const api = {
       method: "DELETE",
     });
   },
+
+  // Loan functions
+  getLoans: () => {
+    return apiRequest("/loans");
+  },
+
+  createLoan: (data: {
+    tenant_user_id: string;
+    amount: number;
+    note?: string;
+  }) => {
+    return apiRequest("/loans", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  markLoanAsPaid: (loanId: string) => {
+    return apiRequest(`/loans/${loanId}/paid`, {
+      method: "PUT",
+    });
+  },
+
+  confirmLoan: (loanId: string) => {
+    return apiRequest(`/loans/${loanId}/confirm`, {
+      method: "PUT",
+    });
+  },
+
+  // Tenant functions
+  getOwnerTenants: ({ propertyId }: { propertyId?: string }) => {
+    const url = propertyId ? `/rent-data/${propertyId}` : "/rent-data";
+    return apiRequest(url);
+  },
 };

@@ -21,24 +21,24 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     const allowedOrigins = [
       "http://localhost:3000",
       "http://localhost:3001",
       "https://my-rent.vercel.app",
       process.env.FRONTEND_URL,
     ].filter(Boolean);
-    
+
     // Check if origin is allowed
-    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+    if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
       return callback(null, true);
     }
-    
-    return callback(new Error('Not allowed by CORS'));
+
+    return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 app.use(cors(corsOptions));
@@ -4182,6 +4182,180 @@ app.delete("/break-periods/:break_record_id", async (req, res) => {
   } catch (error) {
     console.error("Break period deletion error:", error);
     res.status(500).json({ error: "Failed to delete break period" });
+  }
+});
+
+// ==========================================
+// LOAN ENDPOINTS
+// ==========================================
+
+// GET /loans - Get all loans for the current owner
+app.get("/loans", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting loans`);
+
+    // Get all loans where this user is the owner
+    const { data: loans, error } = await supabase
+      .from("loan")
+      .select(
+        `
+        loan_id,
+        owner_user_id,
+        tenant_user_id,
+        amount,
+        status,
+        note,
+        created_date,
+        paid_date,
+        confirmed_date,
+        tenant:tenant_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .eq("owner_user_id", userId)
+      .order("created_date", { ascending: false });
+
+    if (error) throw error;
+
+    console.log(
+      `[SECURITY] Found ${loans?.length || 0} loans for owner ${userId}`
+    );
+
+    res.json({ loans: loans || [] });
+  } catch (error) {
+    console.error("Get loans error:", error);
+    res.status(500).json({ error: "Failed to fetch loans" });
+  }
+});
+
+// POST /loans - Create a new loan
+app.post("/loans", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { tenant_user_id, amount, note } = req.body;
+
+    console.log(
+      `[SECURITY] User ${userId} creating loan for tenant ${tenant_user_id}`
+    );
+
+    if (!tenant_user_id || !amount) {
+      return res
+        .status(400)
+        .json({ error: "tenant_user_id and amount are required" });
+    }
+
+    // Create new loan
+    const { data: newLoan, error } = await supabase
+      .from("loan")
+      .insert({
+        owner_user_id: userId,
+        tenant_user_id: tenant_user_id,
+        amount: amount,
+        status: "pending",
+        note: note || null,
+        created_date: new Date().toISOString(),
+      })
+      .select(
+        `
+        loan_id,
+        owner_user_id,
+        tenant_user_id,
+        amount,
+        status,
+        note,
+        created_date,
+        tenant:tenant_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .single();
+
+    if (error) throw error;
+
+    console.log(`[SECURITY] Loan created successfully: ${newLoan.loan_id}`);
+
+    res.json({ loan: newLoan });
+  } catch (error) {
+    console.error("Create loan error:", error);
+    res.status(500).json({ error: "Failed to create loan" });
+  }
+});
+
+// PUT /loans/:loanId/paid - Mark loan as paid (by tenant)
+app.put("/loans/:loanId/paid", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { loanId } = req.params;
+
+    console.log(`[SECURITY] User ${userId} marking loan ${loanId} as paid`);
+
+    // Update loan status to paid
+    const { data: updatedLoan, error } = await supabase
+      .from("loan")
+      .update({
+        status: "paid",
+        paid_date: new Date().toISOString(),
+      })
+      .eq("loan_id", loanId)
+      .eq("tenant_user_id", userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (!updatedLoan) {
+      return res.status(404).json({ error: "Loan not found or unauthorized" });
+    }
+
+    console.log(`[SECURITY] Loan ${loanId} marked as paid`);
+
+    res.json({ loan: updatedLoan });
+  } catch (error) {
+    console.error("Update loan paid error:", error);
+    res.status(500).json({ error: "Failed to update loan status" });
+  }
+});
+
+// PUT /loans/:loanId/confirm - Mark loan as confirmed (by owner)
+app.put("/loans/:loanId/confirm", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { loanId } = req.params;
+
+    console.log(`[SECURITY] User ${userId} confirming loan ${loanId}`);
+
+    // Update loan status to confirmed
+    const { data: updatedLoan, error } = await supabase
+      .from("loan")
+      .update({
+        status: "confirmed",
+        confirmed_date: new Date().toISOString(),
+      })
+      .eq("loan_id", loanId)
+      .eq("owner_user_id", userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (!updatedLoan) {
+      return res.status(404).json({ error: "Loan not found or unauthorized" });
+    }
+
+    console.log(`[SECURITY] Loan ${loanId} confirmed by owner`);
+
+    res.json({ loan: updatedLoan });
+  } catch (error) {
+    console.error("Confirm loan error:", error);
+    res.status(500).json({ error: "Failed to confirm loan" });
   }
 });
 

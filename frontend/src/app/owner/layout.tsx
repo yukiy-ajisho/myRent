@@ -31,6 +31,7 @@ const navigationItems = [
     href: "/owner/properties",
   },
   { id: "tenants", label: "Tenants", icon: Users, href: "/owner/tenants" },
+  { id: "loan", label: "Loan", icon: DollarSign, href: "/owner/loan" },
   // {
   //   id: "calculate",
   //   label: "Calculate",
