@@ -1017,6 +1017,24 @@ app.post("/add-tenant", async (req, res) => {
 
     if (ledgerError) throw ledgerError;
 
+    // Create initial loan_ledger record
+    const { error: loanLedgerError } = await supabase
+      .from("loan_ledger")
+      .insert({
+        loan_id: null,
+        owner_user_id: userId,
+        tenant_user_id: tenantUserId,
+        source_type: "adjustment",
+        amount: 0,
+      });
+
+    if (loanLedgerError) {
+      console.error(
+        "Failed to create loan_ledger initial record:",
+        loanLedgerError
+      );
+    }
+
     res.json({
       success: true,
       message: "Tenant added to property successfully",
@@ -4282,6 +4300,37 @@ app.post("/loans", async (req, res) => {
 
     console.log(`[SECURITY] Loan created successfully: ${newLoan.loan_id}`);
 
+    // Get latest loan_ledger record for this owner + tenant
+    const { data: latestRecord, error: latestError } = await supabase
+      .from("loan_ledger")
+      .select("amount")
+      .eq("owner_user_id", userId)
+      .eq("tenant_user_id", tenant_user_id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (latestError && latestError.code !== "PGRST116") {
+      console.error("Error fetching latest loan ledger:", latestError);
+    }
+
+    // Calculate new balance
+    const previousBalance =
+      latestRecord && latestRecord.length > 0 ? latestRecord[0].amount : 0;
+    const newBalance = previousBalance + newLoan.amount;
+
+    // Insert into loan_ledger
+    const { error: ledgerError } = await supabase.from("loan_ledger").insert({
+      loan_id: newLoan.loan_id,
+      owner_user_id: userId,
+      tenant_user_id: tenant_user_id,
+      source_type: "bill",
+      amount: newBalance,
+    });
+
+    if (ledgerError) {
+      console.error("Failed to create loan ledger:", ledgerError);
+    }
+
     res.json({ loan: newLoan });
   } catch (error) {
     console.error("Create loan error:", error);
@@ -4351,6 +4400,37 @@ app.put("/loans/:loanId/confirm", async (req, res) => {
     }
 
     console.log(`[SECURITY] Loan ${loanId} confirmed by owner`);
+
+    // Get latest loan_ledger record for this owner + tenant
+    const { data: latestRecord, error: latestError } = await supabase
+      .from("loan_ledger")
+      .select("amount")
+      .eq("owner_user_id", userId)
+      .eq("tenant_user_id", updatedLoan.tenant_user_id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (latestError) {
+      console.error("Error fetching latest loan ledger:", latestError);
+    }
+
+    // Calculate new balance (subtract this loan's amount from previous balance)
+    const previousBalance =
+      latestRecord && latestRecord.length > 0 ? latestRecord[0].amount : 0;
+    const newBalance = previousBalance - updatedLoan.amount;
+
+    // Insert into loan_ledger
+    const { error: ledgerError } = await supabase.from("loan_ledger").insert({
+      loan_id: loanId,
+      owner_user_id: userId,
+      tenant_user_id: updatedLoan.tenant_user_id,
+      source_type: "payment",
+      amount: newBalance,
+    });
+
+    if (ledgerError) {
+      console.error("Failed to create loan ledger:", ledgerError);
+    }
 
     res.json({ loan: updatedLoan });
   } catch (error) {

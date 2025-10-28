@@ -57,7 +57,7 @@ export default function Loan() {
           <div className="grid grid-cols-8 gap-0">
             {/* Header row */}
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Owner Name
+              Owner
             </div>
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
               Amount
@@ -131,7 +131,7 @@ export default function Loan() {
                       }}
                       className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
                     >
-                      Mark as Paid
+                      Paid
                     </button>
                   )}
                 </div>

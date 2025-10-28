@@ -181,7 +181,7 @@ export default function Loan() {
           <div className="grid grid-cols-9 gap-0">
             {/* Header row */}
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Tenant Name
+              Tenant
             </div>
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
               Email
