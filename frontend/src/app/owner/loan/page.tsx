@@ -60,7 +60,7 @@ export default function Loan() {
   const fetchLoans = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await api.getOwnerLoans();
+      const data = await api.getLoans();
       setLoans(data.loans);
     } catch (error) {
       console.error("Error loading loans:", error);
@@ -178,7 +178,7 @@ export default function Loan() {
         ) : filteredLoans.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No loans found</div>
         ) : (
-          <div className="grid grid-cols-9 gap-0">
+          <div className="grid grid-cols-8 gap-0">
             {/* Header row */}
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
               Tenant Name
@@ -203,9 +203,6 @@ export default function Loan() {
             </div>
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
               Note
-            </div>
-            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 overflow-hidden">
-              Action
             </div>
 
             {/* Data rows */}
@@ -246,24 +243,6 @@ export default function Loan() {
                 </div>
                 <div className="text-sm text-gray-500 py-3 overflow-hidden">
                   {loan.note || "—"}
-                </div>
-                <div className="py-3 overflow-hidden">
-                  {loan.status === "paid" && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await api.confirmLoan(loan.loan_id);
-                          fetchLoans();
-                        } catch (error) {
-                          console.error("Error confirming loan:", error);
-                          alert("Failed to confirm loan");
-                        }
-                      }}
-                      className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
-                    >
-                      Confirm
-                    </button>
-                  )}
                 </div>
               </div>
             ))}

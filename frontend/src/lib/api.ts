@@ -387,12 +387,8 @@ export const api = {
   },
 
   // Loan functions
-  getOwnerLoans: () => {
-    return apiRequest("/owner/loans");
-  },
-
-  getTenantLoans: () => {
-    return apiRequest("/tenant/loans");
+  getLoans: () => {
+    return apiRequest("/loans");
   },
 
   createLoan: (data: {

@@ -4,7 +4,7 @@ import "../globals.css";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileText, DollarSign, CreditCard, Receipt } from "lucide-react";
+import { BarChart3, FileText, DollarSign, CreditCard } from "lucide-react";
 import { PropertyProvider, useProperty } from "@/contexts/PropertyContext";
 import { UserProfile } from "@/components/UserProfile";
 
@@ -33,12 +33,6 @@ const navigationItems = [
     label: "Payment",
     icon: CreditCard,
     href: "/tenant/payment",
-  },
-  {
-    id: "loan",
-    label: "Loan",
-    icon: Receipt,
-    href: "/tenant/loan",
   },
 ];
 
