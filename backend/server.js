@@ -1021,7 +1021,7 @@ app.post("/add-tenant", async (req, res) => {
     const { error: loanLedgerError } = await supabase
       .from("loan_ledger")
       .insert({
-        loan_id: null,
+        source_id: null,
         owner_user_id: userId,
         tenant_user_id: tenantUserId,
         source_type: "adjustment",
@@ -4341,7 +4341,7 @@ app.post("/loans", async (req, res) => {
 
     // Insert into loan_ledger
     const { error: ledgerError } = await supabase.from("loan_ledger").insert({
-      loan_id: newLoan.loan_id,
+      source_id: newLoan.loan_id,
       owner_user_id: userId,
       tenant_user_id: tenant_user_id,
       source_type: "bill",
@@ -4442,7 +4442,7 @@ app.put("/loans/:loanId/confirm", async (req, res) => {
 
     // Insert into loan_ledger
     const { error: ledgerError } = await supabase.from("loan_ledger").insert({
-      loan_id: loanId,
+      source_id: loanId,
       owner_user_id: userId,
       tenant_user_id: updatedLoan.tenant_user_id,
       source_type: "payment",
@@ -4772,12 +4772,12 @@ app.post("/owner/process-repayments", async (req, res) => {
         const { error: insertError } = await supabase
           .from("loan_ledger")
           .insert({
-            loan_id: repayment.repayment_id,
+            source_id: repayment.repayment_id,
             owner_user_id: repayment.owner_user_id,
             tenant_user_id: repayment.tenant_user_id,
             source_type: "payment",
             amount: newBalance,
-            created_at: repayment.confirmed_date || new Date().toISOString(),
+            created_at: new Date().toISOString(),
           });
 
         if (insertError) {
