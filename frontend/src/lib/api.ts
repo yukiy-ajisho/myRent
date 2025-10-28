@@ -444,12 +444,6 @@ export const api = {
     });
   },
 
-  processRepayments: () => {
-    return apiRequest("/owner/process-repayments", {
-      method: "POST",
-    });
-  },
-
   // Tenant functions
   getOwnerTenants: ({ propertyId }: { propertyId?: string }) => {
     const url = propertyId ? `/rent-data/${propertyId}` : "/rent-data";

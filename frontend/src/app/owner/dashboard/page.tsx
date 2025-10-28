@@ -27,7 +27,6 @@ export default function Dashboard() {
     []
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState("");
   const [authState, setAuthState] = useState<"checking" | "denied" | "allowed">(
     "checking"
@@ -104,31 +103,6 @@ export default function Dashboard() {
     } else {
       const property = userProperties.find((p) => p.property_id === propertyId);
       setSelectedProperty(property || null);
-    }
-  };
-
-  // Process confirmed repayments
-  const handleProcessRepayments = async () => {
-    setIsProcessing(true);
-    setMessage("");
-
-    try {
-      const result = await api.processRepayments();
-
-      if (result.processedCount > 0) {
-        setMessage(`Success! Processed ${result.processedCount} repayment(s).`);
-      } else {
-        setMessage("No repayments to process.");
-      }
-
-      // Refresh dashboard data to show updated loan balances
-      const data = await api.getAllDashboardData();
-      setAllDashboardData(data.tenants || []);
-    } catch (error) {
-      console.error("Error processing repayments:", error);
-      setMessage("Error processing repayments");
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -303,16 +277,9 @@ export default function Dashboard() {
               {/* Tenant Loan Balance */}
               {!isLoading && uniqueLoanTenants.length > 0 && (
                 <div className="h-full">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-bold">Tenant Loan Balance</h2>
-                    <button
-                      onClick={handleProcessRepayments}
-                      disabled={isProcessing}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      {isProcessing ? "Processing..." : "Process Repayments"}
-                    </button>
-                  </div>
+                  <h2 className="text-2xl font-bold mb-4">
+                    Tenant Loan Balance
+                  </h2>
                   <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm h-full">
                     <div className="grid grid-cols-3 gap-0">
                       {/* ヘッダー行 */}

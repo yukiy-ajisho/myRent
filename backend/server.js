@@ -1017,24 +1017,6 @@ app.post("/add-tenant", async (req, res) => {
 
     if (ledgerError) throw ledgerError;
 
-    // Create initial loan_ledger record
-    const { error: loanLedgerError } = await supabase
-      .from("loan_ledger")
-      .insert({
-        source_id: null,
-        owner_user_id: userId,
-        tenant_user_id: tenantUserId,
-        source_type: "adjustment",
-        amount: 0,
-      });
-
-    if (loanLedgerError) {
-      console.error(
-        "Failed to create loan_ledger initial record:",
-        loanLedgerError
-      );
-    }
-
     res.json({
       success: true,
       message: "Tenant added to property successfully",
@@ -1988,21 +1970,54 @@ app.get("/dashboard", async (req, res) => {
         continue;
       }
 
-      // Get latest loan_ledger record for this owner-tenant pair
-      const { data: latestLoanLedger, error: loanLedgerError } = await supabase
-        .from("loan_ledger")
-        .select("amount, created_at")
+      // Calculate loan balance dynamically from loan and repayment tables
+      // Get all loans for this owner-tenant pair
+      const { data: loans, error: loansError } = await supabase
+        .from("loan")
+        .select("amount, created_date")
         .eq("owner_user_id", userId)
-        .eq("tenant_user_id", tenant.user_id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .eq("tenant_user_id", tenant.user_id);
 
-      if (loanLedgerError && loanLedgerError.code !== "PGRST116") {
-        console.error(
-          `Error fetching loan_ledger for tenant ${tenant.user_id}:`,
-          loanLedgerError
-        );
+      // Get all confirmed repayments for this owner-tenant pair
+      const { data: confirmedRepayments, error: repaymentsError } =
+        await supabase
+          .from("repayment")
+          .select("amount, confirmed_date")
+          .eq("owner_user_id", userId)
+          .eq("tenant_user_id", tenant.user_id)
+          .eq("status", "confirmed");
+
+      let loanBalance = 0;
+      let latestActivity = null;
+
+      if (!loansError && loans) {
+        const totalLoans = loans.reduce((sum, loan) => sum + loan.amount, 0);
+        const totalRepayments =
+          confirmedRepayments && !repaymentsError
+            ? confirmedRepayments.reduce(
+                (sum, repayment) => sum + repayment.amount,
+                0
+              )
+            : 0;
+        loanBalance = totalLoans - totalRepayments;
+
+        // Find latest activity timestamp
+        if (loans.length > 0) {
+          const latestLoanDate = Math.max(
+            ...loans.map((l) => new Date(l.created_date).getTime())
+          );
+          latestActivity = latestLoanDate;
+        }
+        if (confirmedRepayments && confirmedRepayments.length > 0) {
+          const latestRepaymentDate = Math.max(
+            ...confirmedRepayments.map((r) =>
+              new Date(r.confirmed_date).getTime()
+            )
+          );
+          if (!latestActivity || latestRepaymentDate > latestActivity) {
+            latestActivity = latestRepaymentDate;
+          }
+        }
       }
 
       dashboardData.push({
@@ -2014,9 +2029,9 @@ app.get("/dashboard", async (req, res) => {
         last_updated: latestLedger ? latestLedger.posted_at : null,
         property_id: tenant.property_id.toString(),
         property_name: tenant.property_name,
-        loan_balance: latestLoanLedger ? latestLoanLedger.amount : 0,
-        loan_last_updated: latestLoanLedger
-          ? latestLoanLedger.created_at
+        loan_balance: loanBalance,
+        loan_last_updated: latestActivity
+          ? new Date(latestActivity).toISOString()
           : null,
       });
     }
@@ -4321,37 +4336,6 @@ app.post("/loans", async (req, res) => {
 
     console.log(`[SECURITY] Loan created successfully: ${newLoan.loan_id}`);
 
-    // Get latest loan_ledger record for this owner + tenant
-    const { data: latestRecord, error: latestError } = await supabase
-      .from("loan_ledger")
-      .select("amount")
-      .eq("owner_user_id", userId)
-      .eq("tenant_user_id", tenant_user_id)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (latestError && latestError.code !== "PGRST116") {
-      console.error("Error fetching latest loan ledger:", latestError);
-    }
-
-    // Calculate new balance
-    const previousBalance =
-      latestRecord && latestRecord.length > 0 ? latestRecord[0].amount : 0;
-    const newBalance = previousBalance + newLoan.amount;
-
-    // Insert into loan_ledger
-    const { error: ledgerError } = await supabase.from("loan_ledger").insert({
-      source_id: newLoan.loan_id,
-      owner_user_id: userId,
-      tenant_user_id: tenant_user_id,
-      source_type: "bill",
-      amount: newBalance,
-    });
-
-    if (ledgerError) {
-      console.error("Failed to create loan ledger:", ledgerError);
-    }
-
     res.json({ loan: newLoan });
   } catch (error) {
     console.error("Create loan error:", error);
@@ -4422,41 +4406,92 @@ app.put("/loans/:loanId/confirm", async (req, res) => {
 
     console.log(`[SECURITY] Loan ${loanId} confirmed by owner`);
 
-    // Get latest loan_ledger record for this owner + tenant
-    const { data: latestRecord, error: latestError } = await supabase
-      .from("loan_ledger")
-      .select("amount")
-      .eq("owner_user_id", userId)
-      .eq("tenant_user_id", updatedLoan.tenant_user_id)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (latestError) {
-      console.error("Error fetching latest loan ledger:", latestError);
-    }
-
-    // Calculate new balance (subtract this loan's amount from previous balance)
-    const previousBalance =
-      latestRecord && latestRecord.length > 0 ? latestRecord[0].amount : 0;
-    const newBalance = previousBalance - updatedLoan.amount;
-
-    // Insert into loan_ledger
-    const { error: ledgerError } = await supabase.from("loan_ledger").insert({
-      source_id: loanId,
-      owner_user_id: userId,
-      tenant_user_id: updatedLoan.tenant_user_id,
-      source_type: "payment",
-      amount: newBalance,
-    });
-
-    if (ledgerError) {
-      console.error("Failed to create loan ledger:", ledgerError);
-    }
-
     res.json({ loan: updatedLoan });
   } catch (error) {
     console.error("Confirm loan error:", error);
     res.status(500).json({ error: "Failed to confirm loan" });
+  }
+});
+
+// GET /tenant/owners-with-balance - Get owners with outstanding loan balance > 0
+app.get("/tenant/owners-with-balance", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting owners with outstanding balance`
+    );
+
+    // Get all loans for this tenant
+    const { data: loans, error: loansError } = await supabase
+      .from("loan")
+      .select("owner_user_id, amount")
+      .eq("tenant_user_id", userId);
+
+    if (loansError) throw loansError;
+
+    // Get all confirmed repayments for this tenant
+    const { data: repayments, error: repaymentsError } = await supabase
+      .from("repayment")
+      .select("owner_user_id, amount")
+      .eq("tenant_user_id", userId)
+      .eq("status", "confirmed");
+
+    if (repaymentsError) throw repaymentsError;
+
+    // Calculate balance for each owner
+    const ownerBalances = {};
+
+    // Add up loans
+    if (loans) {
+      loans.forEach((loan) => {
+        if (!ownerBalances[loan.owner_user_id]) {
+          ownerBalances[loan.owner_user_id] = 0;
+        }
+        ownerBalances[loan.owner_user_id] += loan.amount;
+      });
+    }
+
+    // Subtract repayments
+    if (repayments) {
+      repayments.forEach((repayment) => {
+        if (!ownerBalances[repayment.owner_user_id]) {
+          ownerBalances[repayment.owner_user_id] = 0;
+        }
+        ownerBalances[repayment.owner_user_id] -= repayment.amount;
+      });
+    }
+
+    // Filter owners with balance > 0
+    const ownerIdsWithBalance = Object.keys(ownerBalances).filter(
+      (ownerId) => ownerBalances[ownerId] > 0
+    );
+
+    if (ownerIdsWithBalance.length === 0) {
+      console.log(
+        `[SECURITY] No owners with outstanding balance for tenant ${userId}`
+      );
+      return res.json({ owners: [] });
+    }
+
+    // Fetch owner details
+    const { data: owners, error: ownersError } = await supabase
+      .from("app_user")
+      .select("user_id, name, email")
+      .in("user_id", ownerIdsWithBalance);
+
+    if (ownersError) throw ownersError;
+
+    console.log(
+      `[SECURITY] Found ${
+        owners?.length || 0
+      } owners with outstanding balance for tenant ${userId}`
+    );
+
+    res.json({ owners: owners || [] });
+  } catch (error) {
+    console.error("Get owners with balance error:", error);
+    res.status(500).json({ error: "Failed to fetch owners with balance" });
   }
 });
 
@@ -4709,120 +4744,6 @@ app.put("/repayments/:repaymentId/confirm", async (req, res) => {
   } catch (error) {
     console.error("Confirm repayment error:", error);
     res.status(500).json({ error: "Failed to confirm repayment" });
-  }
-});
-
-// POST /owner/process-repayments - Batch process confirmed repayments
-app.post("/owner/process-repayments", async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    console.log(`[SECURITY] User ${userId} processing confirmed repayments`);
-
-    // Get all confirmed, unprocessed repayments for this owner
-    const { data: repayments, error: repaymentsError } = await supabase
-      .from("repayment")
-      .select("*")
-      .eq("owner_user_id", userId)
-      .eq("status", "confirmed")
-      .eq("processed", false)
-      .order("repayment_date", { ascending: true });
-
-    if (repaymentsError) throw repaymentsError;
-
-    if (!repayments || repayments.length === 0) {
-      console.log(`[SECURITY] No repayments to process for owner ${userId}`);
-      return res.json({ success: true, processedCount: 0 });
-    }
-
-    console.log(
-      `[SECURITY] Processing ${repayments.length} repayments for owner ${userId}`
-    );
-
-    let processedCount = 0;
-
-    // Process each repayment
-    for (const repayment of repayments) {
-      try {
-        // Get latest balance from loan_ledger for this owner-tenant pair
-        const { data: latestRecord, error: ledgerError } = await supabase
-          .from("loan_ledger")
-          .select("amount")
-          .eq("owner_user_id", repayment.owner_user_id)
-          .eq("tenant_user_id", repayment.tenant_user_id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (ledgerError) {
-          console.error(
-            `Error fetching ledger for repayment ${repayment.repayment_id}:`,
-            ledgerError
-          );
-          continue;
-        }
-
-        const previousBalance = latestRecord?.[0]?.amount || 0;
-        const newBalance = previousBalance - repayment.amount;
-
-        console.log(
-          `Processing repayment ${repayment.repayment_id}: ${previousBalance} - ${repayment.amount} = ${newBalance}`
-        );
-
-        // Create loan_ledger record
-        const { error: insertError } = await supabase
-          .from("loan_ledger")
-          .insert({
-            source_id: repayment.repayment_id,
-            owner_user_id: repayment.owner_user_id,
-            tenant_user_id: repayment.tenant_user_id,
-            source_type: "payment",
-            amount: newBalance,
-            created_at: new Date().toISOString(),
-          });
-
-        if (insertError) {
-          console.error(
-            `Error creating ledger for repayment ${repayment.repayment_id}:`,
-            insertError
-          );
-          continue;
-        }
-
-        // Mark repayment as processed
-        const { error: updateError } = await supabase
-          .from("repayment")
-          .update({ processed: true })
-          .eq("repayment_id", repayment.repayment_id);
-
-        if (updateError) {
-          console.error(
-            `Error marking repayment ${repayment.repayment_id} as processed:`,
-            updateError
-          );
-          continue;
-        }
-
-        processedCount++;
-        console.log(
-          `[SECURITY] Repayment ${repayment.repayment_id} processed successfully`
-        );
-      } catch (error) {
-        console.error(
-          `Error processing repayment ${repayment.repayment_id}:`,
-          error
-        );
-        continue;
-      }
-    }
-
-    console.log(
-      `[SECURITY] Successfully processed ${processedCount} out of ${repayments.length} repayments`
-    );
-
-    res.json({ success: true, processedCount: processedCount });
-  } catch (error) {
-    console.error("Process repayments error:", error);
-    res.status(500).json({ error: "Failed to process repayments" });
   }
 });
 
