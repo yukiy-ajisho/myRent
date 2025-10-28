@@ -4504,6 +4504,214 @@ app.get("/tenant/loans", async (req, res) => {
   }
 });
 
+// ==========================================
+// REPAYMENT ENDPOINTS
+// ==========================================
+
+// GET /repayments - Get all repayments for the current owner
+app.get("/repayments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting repayments`);
+
+    // Get all repayments where this user is the owner
+    const { data: repayments, error } = await supabase
+      .from("repayment")
+      .select(
+        `
+        repayment_id,
+        owner_user_id,
+        tenant_user_id,
+        amount,
+        repayment_date,
+        note,
+        status,
+        confirmed_date,
+        processed,
+        tenant:tenant_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .eq("owner_user_id", userId)
+      .order("repayment_date", { ascending: false });
+
+    if (error) throw error;
+
+    console.log(
+      `[SECURITY] Found ${
+        repayments?.length || 0
+      } repayments for owner ${userId}`
+    );
+
+    res.json({ repayments: repayments || [] });
+  } catch (error) {
+    console.error("Get repayments error:", error);
+    res.status(500).json({ error: "Failed to fetch repayments" });
+  }
+});
+
+// GET /tenant/repayments - Get all repayments for the current tenant
+app.get("/tenant/repayments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting tenant repayments`);
+
+    // Get all repayments where this user is the tenant
+    const { data: repayments, error } = await supabase
+      .from("repayment")
+      .select(
+        `
+        repayment_id,
+        owner_user_id,
+        tenant_user_id,
+        amount,
+        repayment_date,
+        note,
+        status,
+        confirmed_date,
+        owner:owner_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .eq("tenant_user_id", userId)
+      .order("repayment_date", { ascending: false });
+
+    if (error) throw error;
+
+    console.log(
+      `[SECURITY] Found ${
+        repayments?.length || 0
+      } repayments for tenant ${userId}`
+    );
+
+    res.json({ repayments: repayments || [] });
+  } catch (error) {
+    console.error("Get tenant repayments error:", error);
+    res.status(500).json({ error: "Failed to fetch tenant repayments" });
+  }
+});
+
+// POST /repayments - Create a new repayment (by tenant)
+app.post("/repayments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { owner_user_id, amount, note } = req.body;
+
+    console.log(
+      `[SECURITY] User ${userId} creating repayment for owner ${owner_user_id}`
+    );
+
+    if (!owner_user_id || !amount) {
+      return res
+        .status(400)
+        .json({ error: "owner_user_id and amount are required" });
+    }
+
+    // Create new repayment
+    const { data: newRepayment, error } = await supabase
+      .from("repayment")
+      .insert({
+        owner_user_id: owner_user_id,
+        tenant_user_id: userId,
+        amount: amount,
+        repayment_date: new Date().toISOString(),
+        note: note || null,
+        status: "pending",
+        confirmed_date: null,
+        processed: false,
+      })
+      .select(
+        `
+        repayment_id,
+        owner_user_id,
+        tenant_user_id,
+        amount,
+        repayment_date,
+        note,
+        status,
+        confirmed_date,
+        processed,
+        owner:owner_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .single();
+
+    if (error) throw error;
+
+    console.log(
+      `[SECURITY] Repayment created successfully: ${newRepayment.repayment_id}`
+    );
+
+    res.json({ repayment: newRepayment });
+  } catch (error) {
+    console.error("Create repayment error:", error);
+    res.status(500).json({ error: "Failed to create repayment" });
+  }
+});
+
+// PUT /repayments/:repaymentId/confirm - Mark repayment as confirmed (by owner)
+app.put("/repayments/:repaymentId/confirm", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { repaymentId } = req.params;
+
+    console.log(
+      `[SECURITY] User ${userId} confirming repayment ${repaymentId}`
+    );
+
+    // Update repayment status to confirmed
+    const { data: updatedRepayment, error } = await supabase
+      .from("repayment")
+      .update({
+        status: "confirmed",
+        confirmed_date: new Date().toISOString(),
+      })
+      .eq("repayment_id", repaymentId)
+      .eq("owner_user_id", userId)
+      .select(
+        `
+        repayment_id,
+        owner_user_id,
+        tenant_user_id,
+        amount,
+        repayment_date,
+        note,
+        status,
+        confirmed_date,
+        processed
+        `
+      )
+      .single();
+
+    if (error) throw error;
+
+    if (!updatedRepayment) {
+      return res
+        .status(404)
+        .json({ error: "Repayment not found or unauthorized" });
+    }
+
+    console.log(`[SECURITY] Repayment ${repaymentId} confirmed by owner`);
+
+    res.json({ repayment: updatedRepayment });
+  } catch (error) {
+    console.error("Confirm repayment error:", error);
+    res.status(500).json({ error: "Failed to confirm repayment" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });

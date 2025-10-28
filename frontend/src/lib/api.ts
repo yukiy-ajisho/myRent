@@ -418,6 +418,32 @@ export const api = {
     });
   },
 
+  // Repayment functions
+  getRepayments: () => {
+    return apiRequest("/repayments");
+  },
+
+  getTenantRepayments: () => {
+    return apiRequest("/tenant/repayments");
+  },
+
+  createRepayment: (data: {
+    owner_user_id: string;
+    amount: number;
+    note?: string | null;
+  }) => {
+    return apiRequest("/repayments", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  confirmRepayment: (repaymentId: string) => {
+    return apiRequest(`/repayments/${repaymentId}/confirm`, {
+      method: "PUT",
+    });
+  },
+
   // Tenant functions
   getOwnerTenants: ({ propertyId }: { propertyId?: string }) => {
     const url = propertyId ? `/rent-data/${propertyId}` : "/rent-data";

@@ -29,11 +29,30 @@ interface Tenant {
   property_name: string;
 }
 
+interface Repayment {
+  repayment_id: string;
+  owner_user_id: string;
+  tenant_user_id: string;
+  amount: number;
+  repayment_date: string;
+  note?: string | null;
+  status: "pending" | "confirmed";
+  confirmed_date?: string | null;
+  processed: boolean;
+  tenant?: {
+    user_id: string;
+    name: string;
+    email: string;
+  };
+}
+
 export default function Loan() {
   const { userProperties, selectedProperty, setSelectedProperty } =
     useProperty();
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [repayments, setRepayments] = useState<Repayment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingRepayments, setIsLoadingRepayments] = useState(false);
   const [showCreateLoanModal, setShowCreateLoanModal] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]); // Add state for all tenants
 
@@ -69,12 +88,25 @@ export default function Loan() {
     }
   }, []);
 
+  const fetchRepayments = useCallback(async () => {
+    try {
+      setIsLoadingRepayments(true);
+      const data = await api.getRepayments();
+      setRepayments(data.repayments);
+    } catch (error) {
+      console.error("Error loading repayments:", error);
+    } finally {
+      setIsLoadingRepayments(false);
+    }
+  }, []);
+
   // 初期データ読み込み
   useEffect(() => {
     fetchLoans();
+    fetchRepayments();
     fetchTenants();
     // PropertyContextが既に初期設定をしているので、ここでは何もしない
-  }, [fetchTenants, fetchLoans]);
+  }, [fetchTenants, fetchLoans, fetchRepayments]);
 
   // Filter and group tenants based on selected property
   const { groupedTenants } = useMemo(() => {
@@ -130,6 +162,38 @@ export default function Loan() {
     );
   }, [loans, tenants, selectedProperty]);
 
+  // Filter repayments based on selected property
+  const filteredRepayments = useMemo(() => {
+    // All Propertiesが選択されている場合
+    if (!selectedProperty) {
+      return repayments;
+    }
+
+    // 選択されたプロパティのテナントID一覧を取得
+    const targetTenantIds = tenants
+      .filter(
+        (t) =>
+          t.property_id.toString() === selectedProperty.property_id.toString()
+      )
+      .map((t) => t.user_id);
+
+    // そのテナントのrepaymentsだけをフィルタリング
+    return repayments.filter((repayment) =>
+      targetTenantIds.includes(repayment.tenant_user_id)
+    );
+  }, [repayments, tenants, selectedProperty]);
+
+  // Confirm repayment handler
+  const handleConfirmRepayment = async (repaymentId: string) => {
+    try {
+      await api.confirmRepayment(repaymentId);
+      fetchRepayments();
+    } catch (error) {
+      console.error("Error confirming repayment:", error);
+      alert("Failed to confirm repayment");
+    }
+  };
+
   // プロパティ選択変更
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const propertyId = e.target.value;
@@ -173,6 +237,7 @@ export default function Loan() {
 
       {/* Loan Records Table */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <h2 className="text-xl font-bold mb-4 text-gray-800">Loans</h2>
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading loans...</div>
         ) : filteredLoans.length === 0 ? (
@@ -280,6 +345,106 @@ export default function Loan() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Repayments Section */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mt-8">
+        <h2 className="text-xl font-bold mb-4 text-gray-800">Repayments</h2>
+        {isLoadingRepayments ? (
+          <div className="text-center py-8 text-gray-500">
+            Loading repayments...
+          </div>
+        ) : filteredRepayments.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No repayments found
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Tenant
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Amount
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Repayment Date
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Confirmed Date
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Note
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Status
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRepayments.map((repayment) => (
+                  <tr
+                    key={repayment.repayment_id}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-gray-900">
+                        {repayment.tenant?.name || "Unknown"}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {repayment.tenant?.email || "N/A"}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-gray-900">
+                      ${repayment.amount.toFixed(2)}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {new Date(repayment.repayment_date).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {repayment.confirmed_date
+                        ? new Date(
+                            repayment.confirmed_date
+                          ).toLocaleDateString()
+                        : "--/--/--"}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {repayment.note || "—"}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`px-2 py-1 rounded text-sm font-medium ${
+                          repayment.status === "confirmed"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {repayment.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {repayment.status === "pending" && (
+                        <button
+                          onClick={() =>
+                            handleConfirmRepayment(repayment.repayment_id)
+                          }
+                          className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                        >
+                          Confirm
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
