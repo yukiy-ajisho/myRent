@@ -4336,6 +4336,39 @@ app.post("/loans", async (req, res) => {
 
     console.log(`[SECURITY] Loan created successfully: ${newLoan.loan_id}`);
 
+    // Create notification for tenant (non-blocking)
+    try {
+      // Get owner name
+      const { data: ownerData } = await supabase
+        .from("app_user")
+        .select("name")
+        .eq("user_id", userId)
+        .single();
+
+      const ownerName = ownerData?.name || "Owner";
+
+      // Create notification
+      await createNotification({
+        userId: tenant_user_id,
+        type: "loan_created",
+        priority: "info",
+        title: "New Loan Created",
+        message: `You have a new loan of ¥${amount.toLocaleString()} from ${ownerName}`,
+        actionUrl: "/tenant/loan",
+        actionLabel: "View Loan",
+      });
+
+      console.log(
+        `[SECURITY] Notification created for tenant ${tenant_user_id} about loan ${newLoan.loan_id}`
+      );
+    } catch (notificationError) {
+      // Don't block loan creation if notification fails
+      console.error(
+        "Failed to create loan notification (non-critical):",
+        notificationError
+      );
+    }
+
     res.json({ loan: newLoan });
   } catch (error) {
     console.error("Create loan error:", error);
@@ -4689,6 +4722,39 @@ app.post("/repayments", async (req, res) => {
       `[SECURITY] Repayment created successfully: ${newRepayment.repayment_id}`
     );
 
+    // Create notification for owner (non-blocking)
+    try {
+      // Get tenant name
+      const { data: tenantData } = await supabase
+        .from("app_user")
+        .select("name")
+        .eq("user_id", userId)
+        .single();
+
+      const tenantName = tenantData?.name || "Tenant";
+
+      // Create notification
+      await createNotification({
+        userId: owner_user_id,
+        type: "repayment_request",
+        priority: "urgent",
+        title: "New Repayment Request",
+        message: `${tenantName} sent a repayment request: ¥${amount.toLocaleString()}`,
+        actionUrl: "/owner/loan",
+        actionLabel: "Confirm Payment",
+      });
+
+      console.log(
+        `[SECURITY] Notification created for owner ${owner_user_id} about repayment ${newRepayment.repayment_id}`
+      );
+    } catch (notificationError) {
+      // Don't block repayment creation if notification fails
+      console.error(
+        "Failed to create repayment notification (non-critical):",
+        notificationError
+      );
+    }
+
     res.json({ repayment: newRepayment });
   } catch (error) {
     console.error("Create repayment error:", error);
@@ -4746,6 +4812,136 @@ app.put("/repayments/:repaymentId/confirm", async (req, res) => {
     res.status(500).json({ error: "Failed to confirm repayment" });
   }
 });
+
+// ==========================================
+// NOTIFICATION ENDPOINTS
+// ==========================================
+
+// GET /notifications - Get all notifications for current user
+app.get("/notifications", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting notifications`);
+
+    const { data: notifications, error } = await supabase
+      .from("notification")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+
+    console.log(
+      `[SECURITY] Found ${
+        notifications?.length || 0
+      } notifications for user ${userId}`
+    );
+
+    res.json({ notifications: notifications || [] });
+  } catch (error) {
+    console.error("Get notifications error:", error);
+    res.status(500).json({ error: "Failed to fetch notifications" });
+  }
+});
+
+// PUT /notifications/:notificationId/read - Mark notification as read
+app.put("/notifications/:notificationId/read", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { notificationId } = req.params;
+
+    console.log(
+      `[SECURITY] User ${userId} marking notification ${notificationId} as read`
+    );
+
+    const { data: updatedNotification, error } = await supabase
+      .from("notification")
+      .update({ is_read: true })
+      .eq("notification_id", notificationId)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (!updatedNotification) {
+      return res
+        .status(404)
+        .json({ error: "Notification not found or unauthorized" });
+    }
+
+    res.json({ notification: updatedNotification });
+  } catch (error) {
+    console.error("Mark notification as read error:", error);
+    res.status(500).json({ error: "Failed to mark notification as read" });
+  }
+});
+
+// DELETE /notifications/:notificationId - Delete notification
+app.delete("/notifications/:notificationId", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { notificationId } = req.params;
+
+    console.log(
+      `[SECURITY] User ${userId} deleting notification ${notificationId}`
+    );
+
+    const { error } = await supabase
+      .from("notification")
+      .delete()
+      .eq("notification_id", notificationId)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Delete notification error:", error);
+    res.status(500).json({ error: "Failed to delete notification" });
+  }
+});
+
+// Helper function to create notification
+async function createNotification({
+  userId,
+  type,
+  priority,
+  title,
+  message,
+  actionUrl,
+  actionLabel,
+  expiresAt = null,
+}) {
+  try {
+    const { data: notification, error } = await supabase
+      .from("notification")
+      .insert({
+        user_id: userId,
+        type: type,
+        priority: priority,
+        title: title,
+        message: message,
+        action_url: actionUrl,
+        action_label: actionLabel,
+        expires_at: expiresAt,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Failed to create notification:", error);
+      return null;
+    }
+
+    return notification;
+  } catch (error) {
+    console.error("Create notification error:", error);
+    return null;
+  }
+}
 
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);

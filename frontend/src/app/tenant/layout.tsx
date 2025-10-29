@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { PropertyProvider, useProperty } from "@/contexts/PropertyContext";
 import { UserProfile } from "@/components/UserProfile";
+import { NotificationIcon } from "@/components/NotificationIcon";
 
 // ナビゲーション項目
 const navigationItems = [
@@ -174,8 +175,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             <h1 className="text-2xl font-bold text-gray-900">Tenant Portal</h1>
           </div>
 
-          {/* ユーザーアバター・名前（右上） */}
-          <UserProfile />
+          {/* 右側: 通知 + ユーザープロフィール */}
+          <div className="ml-auto flex items-center gap-4">
+            <NotificationIcon />
+            <UserProfile />
+          </div>
         </header>
 
         {/* メインコンテンツ（下部88%） */}

@@ -444,6 +444,23 @@ export const api = {
     });
   },
 
+  // Notification functions
+  getNotifications: () => {
+    return apiRequest("/notifications");
+  },
+
+  markNotificationAsRead: (notificationId: string) => {
+    return apiRequest(`/notifications/${notificationId}/read`, {
+      method: "PUT",
+    });
+  },
+
+  deleteNotification: (notificationId: string) => {
+    return apiRequest(`/notifications/${notificationId}`, {
+      method: "DELETE",
+    });
+  },
+
   // Tenant functions
   getOwnerTenants: ({ propertyId }: { propertyId?: string }) => {
     const url = propertyId ? `/rent-data/${propertyId}` : "/rent-data";
