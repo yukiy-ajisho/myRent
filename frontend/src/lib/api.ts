@@ -466,4 +466,30 @@ export const api = {
     const url = propertyId ? `/rent-data/${propertyId}` : "/rent-data";
     return apiRequest(url);
   },
+
+  // Payment Schedule functions
+  getBillRunsForSchedule: () => {
+    return apiRequest("/owner/bill-runs-for-schedule");
+  },
+
+  getScheduledPayments: () => {
+    return apiRequest("/owner/scheduled-payments");
+  },
+
+  createPaymentSchedule: (data: {
+    bill_run_id: number;
+    tenant_user_id: string;
+    property_id: number;
+    total_amount: number;
+    schedule_type: string;
+    reference_date_type?: string;
+    specific_month?: string;
+    specific_date?: number;
+    installment_count?: number;
+  }) => {
+    return apiRequest("/owner/create-payment-schedule", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };

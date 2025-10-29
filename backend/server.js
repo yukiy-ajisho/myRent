@@ -671,7 +671,7 @@ app.get("/payments", async (req, res) => {
 
     const propertyIds = userProperties.map((up) => up.property_id);
 
-    // 支払いレコードをテナント名と一緒に取得
+    // 支払いレコードをテナント名と一緒に取得 (free payments only, due_date IS NULL)
     const { data: payments, error: paymentsError } = await supabase
       .from("payment")
       .select(
@@ -689,6 +689,7 @@ app.get("/payments", async (req, res) => {
       `
       )
       .in("property_id", propertyIds)
+      .is("due_date", null)
       .order("paid_at", { ascending: false });
 
     if (paymentsError) throw paymentsError;
@@ -781,7 +782,7 @@ app.get("/payments/:propertyId", async (req, res) => {
       return res.status(403).json({ error: "Access denied to this property" });
     }
 
-    // 支払いレコードをテナント名と一緒に取得
+    // 支払いレコードをテナント名と一緒に取得 (free payments only, due_date IS NULL)
     const { data: payments, error: paymentsError } = await supabase
       .from("payment")
       .select(
@@ -799,6 +800,7 @@ app.get("/payments/:propertyId", async (req, res) => {
       `
       )
       .eq("property_id", propertyId)
+      .is("due_date", null)
       .order("paid_at", { ascending: false });
 
     if (paymentsError) throw paymentsError;
@@ -4942,6 +4944,503 @@ async function createNotification({
     return null;
   }
 }
+
+// ============================================
+// PAYMENT SCHEDULE ENDPOINTS
+// ============================================
+
+// GET /owner/bill-runs-for-schedule
+app.get("/owner/bill-runs-for-schedule", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting bill runs for schedule creation`
+    );
+
+    // Get owner's properties
+    const { data: userProperties, error: propertiesError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId);
+
+    if (propertiesError) throw propertiesError;
+
+    if (!userProperties || userProperties.length === 0) {
+      return res.json({ bill_runs: [] });
+    }
+
+    const propertyIds = userProperties.map((up) => up.property_id);
+
+    // Get bill runs
+    const { data: billRuns, error: billRunsError } = await supabase
+      .from("bill_run")
+      .select("bill_run_id, month_start, property_id")
+      .in("property_id", propertyIds)
+      .order("month_start", { ascending: false });
+
+    if (billRunsError) throw billRunsError;
+
+    // Get property names
+    const { data: properties, error: propertiesError2 } = await supabase
+      .from("property")
+      .select("property_id, name")
+      .in("property_id", propertyIds);
+
+    if (propertiesError2) throw propertiesError2;
+
+    const propertyMap = {};
+    properties.forEach((p) => {
+      propertyMap[p.property_id] = p.name;
+    });
+
+    // For each bill run, get tenants and their total amounts
+    const billRunsWithTenants = await Promise.all(
+      billRuns.map(async (billRun) => {
+        // Get bill lines for this bill run
+        const { data: billLines, error: billLinesError } = await supabase
+          .from("bill_line")
+          .select(
+            `
+            user_id,
+            amount,
+            app_user(name)
+          `
+          )
+          .eq("bill_run_id", billRun.bill_run_id);
+
+        if (billLinesError) {
+          console.error("Error fetching bill lines:", billLinesError);
+          return {
+            bill_run_id: billRun.bill_run_id,
+            month_start: billRun.month_start,
+            property_id: billRun.property_id,
+            property_name: propertyMap[billRun.property_id],
+            tenants: [],
+          };
+        }
+
+        // Get nicknames for tenants
+        const tenantIds = [...new Set(billLines.map((bl) => bl.user_id))];
+        let nicknames = {};
+
+        if (tenantIds.length > 0) {
+          const { data: ownerTenants, error: nickError } = await supabase
+            .from("owner_tenant")
+            .select("tenant_id, nick_name")
+            .eq("owner_id", userId)
+            .in("tenant_id", tenantIds);
+
+          if (!nickError && ownerTenants) {
+            nicknames = ownerTenants.reduce((acc, ot) => {
+              acc[ot.tenant_id] = ot.nick_name;
+              return acc;
+            }, {});
+          }
+        }
+
+        // Aggregate amounts by tenant
+        const tenantAmounts = {};
+        billLines.forEach((bl) => {
+          if (!tenantAmounts[bl.user_id]) {
+            tenantAmounts[bl.user_id] = {
+              user_id: bl.user_id,
+              name: bl.app_user?.name || "Unknown",
+              nick_name: nicknames[bl.user_id] || null,
+              total_amount: 0,
+            };
+          }
+          tenantAmounts[bl.user_id].total_amount += bl.amount;
+        });
+
+        // Check which tenants already have scheduled payments for this bill_run
+        const { data: existingPayments, error: paymentsError } = await supabase
+          .from("payment")
+          .select("user_id")
+          .eq("bill_run_id", billRun.bill_run_id)
+          .not("due_date", "is", null);
+
+        const scheduledTenantIds = existingPayments
+          ? [...new Set(existingPayments.map((p) => p.user_id))]
+          : [];
+
+        // Add has_schedule flag to each tenant
+        const tenantsWithScheduleInfo = Object.values(tenantAmounts).map(
+          (tenant) => ({
+            ...tenant,
+            has_schedule: scheduledTenantIds.includes(tenant.user_id),
+          })
+        );
+
+        return {
+          bill_run_id: billRun.bill_run_id,
+          month_start: billRun.month_start,
+          property_id: billRun.property_id,
+          property_name: propertyMap[billRun.property_id],
+          tenants: tenantsWithScheduleInfo,
+        };
+      })
+    );
+
+    console.log(
+      `[SECURITY] Found ${billRunsWithTenants.length} bill runs for user ${userId}`
+    );
+
+    res.json({ bill_runs: billRunsWithTenants });
+  } catch (error) {
+    console.error("Get bill runs for schedule error:", error);
+    res.status(500).json({ error: "Failed to fetch bill runs" });
+  }
+});
+
+// GET /owner/scheduled-payments
+app.get("/owner/scheduled-payments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting scheduled payments`);
+
+    // Get owner's properties
+    const { data: userProperties, error: propertiesError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId);
+
+    if (propertiesError) throw propertiesError;
+
+    if (!userProperties || userProperties.length === 0) {
+      return res.json({ scheduled_payments: [] });
+    }
+
+    const propertyIds = userProperties.map((up) => up.property_id);
+
+    // Get scheduled payments (where due_date IS NOT NULL)
+    const { data: payments, error: paymentsError } = await supabase
+      .from("payment")
+      .select(
+        `
+        payment_id,
+        user_id,
+        property_id,
+        amount,
+        note,
+        paid_at,
+        due_date,
+        bill_run_id,
+        app_user!inner(name, email)
+      `
+      )
+      .in("property_id", propertyIds)
+      .not("due_date", "is", null)
+      .order("due_date", { ascending: true });
+
+    if (paymentsError) throw paymentsError;
+
+    // Get bill run data separately
+    const billRunIds = [
+      ...new Set(payments.map((p) => p.bill_run_id).filter(Boolean)),
+    ];
+    let billRunMap = {};
+
+    if (billRunIds.length > 0) {
+      const { data: billRuns, error: billRunsError } = await supabase
+        .from("bill_run")
+        .select("bill_run_id, month_start")
+        .in("bill_run_id", billRunIds);
+
+      if (!billRunsError && billRuns) {
+        billRuns.forEach((br) => {
+          billRunMap[br.bill_run_id] = { month_start: br.month_start };
+        });
+      }
+    }
+
+    // Get nicknames
+    const tenantIds = [...new Set(payments.map((p) => p.user_id))];
+    let nicknames = {};
+
+    if (tenantIds.length > 0) {
+      const { data: ownerTenants, error: nickError } = await supabase
+        .from("owner_tenant")
+        .select("tenant_id, nick_name")
+        .eq("owner_id", userId)
+        .in("tenant_id", tenantIds);
+
+      if (!nickError && ownerTenants) {
+        nicknames = ownerTenants.reduce((acc, ot) => {
+          acc[ot.tenant_id] = ot.nick_name;
+          return acc;
+        }, {});
+      }
+    }
+
+    // Check if payments are confirmed (in ledger)
+    const paymentIds = payments.map((p) => p.payment_id);
+    const { data: ledgerEntries, error: ledgerError } = await supabase
+      .from("ledger")
+      .select("source_id, posted_at")
+      .eq("source_type", "payment")
+      .in("source_id", paymentIds);
+
+    if (ledgerError) throw ledgerError;
+
+    const confirmedAtMap = new Map();
+    ledgerEntries.forEach((entry) => {
+      confirmedAtMap.set(entry.source_id, entry.posted_at);
+    });
+
+    // Add status info
+    const paymentsWithStatus = payments.map((payment) => ({
+      ...payment,
+      app_user: {
+        ...payment.app_user,
+        nick_name: nicknames[payment.user_id] || null,
+      },
+      bill_run: billRunMap[payment.bill_run_id] || { month_start: null },
+      isAccepted: confirmedAtMap.has(payment.payment_id),
+      confirmedAt: confirmedAtMap.get(payment.payment_id) || null,
+    }));
+
+    console.log(
+      `[SECURITY] Found ${paymentsWithStatus.length} scheduled payments for user ${userId}`
+    );
+
+    res.json({ scheduled_payments: paymentsWithStatus });
+  } catch (error) {
+    console.error("Get scheduled payments error:", error);
+    res.status(500).json({ error: "Failed to fetch scheduled payments" });
+  }
+});
+
+// POST /owner/create-payment-schedule
+app.post("/owner/create-payment-schedule", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      bill_run_id,
+      tenant_user_id,
+      property_id,
+      total_amount,
+      schedule_type,
+      reference_date_type,
+      specific_month,
+      specific_date,
+      installment_count,
+    } = req.body;
+
+    console.log(`[SECURITY] User ${userId} creating payment schedule`);
+    console.log("Schedule params:", {
+      bill_run_id,
+      tenant_user_id,
+      schedule_type,
+      total_amount,
+    });
+
+    // Validate owner has access to property
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", property_id)
+      .single();
+
+    if (accessError || !userProperty) {
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // Check if schedule already exists for this bill_run + tenant
+    const { data: existingPayments, error: checkError } = await supabase
+      .from("payment")
+      .select("payment_id")
+      .eq("bill_run_id", bill_run_id)
+      .eq("user_id", tenant_user_id)
+      .limit(1);
+
+    if (checkError) throw checkError;
+
+    if (existingPayments && existingPayments.length > 0) {
+      console.log(
+        `[SECURITY] Schedule already exists for bill_run ${bill_run_id} and tenant ${tenant_user_id}`
+      );
+      return res.status(400).json({
+        error: "Payment schedule already exists for this bill and tenant",
+      });
+    }
+
+    let payments = [];
+    const today = new Date();
+
+    // Calculate payment dates based on schedule_type
+    if (schedule_type === "month_start") {
+      // Next month 1st
+      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      payments = [
+        {
+          user_id: tenant_user_id,
+          property_id,
+          amount: total_amount,
+          note: `Payment schedule for ${new Date(
+            today
+          ).toLocaleDateString()} bill`,
+          paid_at: null,
+          due_date: nextMonth.toISOString().split("T")[0],
+          bill_run_id,
+        },
+      ];
+    } else if (schedule_type === "month_end") {
+      // This month end or next month end
+      const lastDayOfMonth = new Date(
+        today.getFullYear(),
+        today.getMonth() + 1,
+        0
+      );
+      let dueDate = lastDayOfMonth;
+
+      // If today is the last day, use next month end
+      if (today.getDate() === lastDayOfMonth.getDate()) {
+        dueDate = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+      }
+
+      payments = [
+        {
+          user_id: tenant_user_id,
+          property_id,
+          amount: total_amount,
+          note: `Payment schedule for ${new Date(
+            today
+          ).toLocaleDateString()} bill`,
+          paid_at: null,
+          due_date: dueDate.toISOString().split("T")[0],
+          bill_run_id,
+        },
+      ];
+    } else if (schedule_type === "specific_date") {
+      // Specific month and day
+      const [year, month] = specific_month.split("-").map(Number);
+      let dueDate = new Date(year, month - 1, specific_date);
+
+      // Adjust if date exceeds month's last day
+      const lastDay = new Date(year, month, 0).getDate();
+      if (specific_date > lastDay) {
+        dueDate.setDate(lastDay);
+      }
+
+      // Validate date is not in the past
+      const todayDate = new Date(today);
+      todayDate.setHours(0, 0, 0, 0);
+      dueDate.setHours(0, 0, 0, 0);
+      if (dueDate < todayDate) {
+        return res
+          .status(400)
+          .json({ error: "Cannot set payment schedule for past dates" });
+      }
+
+      payments = [
+        {
+          user_id: tenant_user_id,
+          property_id,
+          amount: total_amount,
+          note: `Payment schedule for ${new Date(
+            today
+          ).toLocaleDateString()} bill`,
+          paid_at: null,
+          due_date: dueDate.toISOString().split("T")[0],
+          bill_run_id,
+        },
+      ];
+    } else if (schedule_type === "installment") {
+      // Installment plan
+      // Validate installment count is at least 2
+      if (installment_count < 2) {
+        return res.status(400).json({
+          error:
+            "Installment count must be at least 2. Use 'Month Start', 'Month End', or 'Specific Date' for single payment.",
+        });
+      }
+
+      let startDate, endDate;
+
+      if (reference_date_type === "today") {
+        startDate = new Date(today);
+        endDate = new Date(today);
+        endDate.setDate(endDate.getDate() + 30);
+      } else {
+        // specific_month format: 'YYYY-MM'
+        const [year, month] = specific_month.split("-").map(Number);
+        startDate = new Date(year, month - 1, 1);
+        endDate = new Date(year, month, 0); // Last day of month
+
+        // Validate that the selected month is in the future (not current or past)
+        const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const selectedMonth = new Date(year, month - 1, 1);
+        if (selectedMonth <= currentMonth) {
+          return res.status(400).json({
+            error:
+              "Cannot create installment schedule for current or past month. Use 'From Today' for current month.",
+          });
+        }
+      }
+
+      const totalDays = Math.ceil(
+        (endDate - startDate) / (1000 * 60 * 60 * 24)
+      );
+      const baseAmount = Math.floor(total_amount / installment_count);
+      const remainder = total_amount - baseAmount * installment_count;
+      const intervalDays = Math.floor(totalDays / installment_count);
+
+      // Calculate dates backwards from end date
+      for (let i = installment_count - 1; i >= 0; i--) {
+        const daysFromEnd = i * intervalDays;
+        const dueDate = new Date(endDate);
+        dueDate.setDate(dueDate.getDate() - daysFromEnd);
+
+        // Add remainder to last installment
+        const amount =
+          i === installment_count - 1 ? baseAmount + remainder : baseAmount;
+
+        payments.unshift({
+          user_id: tenant_user_id,
+          property_id,
+          amount,
+          note: `Installment ${installment_count - i}/${installment_count}`,
+          paid_at: null,
+          due_date: dueDate.toISOString().split("T")[0],
+          bill_run_id,
+        });
+      }
+    } else {
+      return res.status(400).json({ error: "Invalid schedule_type" });
+    }
+
+    // Insert payments into database
+    const { data: createdPayments, error: insertError } = await supabase
+      .from("payment")
+      .insert(payments)
+      .select();
+
+    if (insertError) throw insertError;
+
+    console.log(
+      `[SECURITY] Created ${createdPayments.length} scheduled payments for user ${userId}`
+    );
+
+    res.json({
+      success: true,
+      payments: createdPayments,
+      schedule_summary: {
+        total_amount,
+        installment_count: payments.length,
+        first_due_date: payments[0].due_date,
+        last_due_date: payments[payments.length - 1].due_date,
+      },
+    });
+  } catch (error) {
+    console.error("Create payment schedule error:", error);
+    console.error("Error details:", error.message);
+    console.error("Error stack:", error.stack);
+    res.status(500).json({ error: "Failed to create payment schedule" });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useProperty, Property } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
+import PaymentScheduleModal from "@/components/PaymentScheduleModal";
 
 // Bill Line データの型定義
 interface BillLine {
@@ -38,6 +39,28 @@ interface Payment {
   confirmedAt: string | null;
 }
 
+// Scheduled Payment データの型定義
+interface ScheduledPayment {
+  payment_id: string;
+  user_id: string;
+  property_id: string;
+  amount: number;
+  note: string;
+  paid_at: string | null;
+  due_date: string;
+  bill_run_id: number;
+  app_user: {
+    name: string;
+    email: string;
+    nick_name?: string | null;
+  };
+  bill_run: {
+    month_start: string;
+  };
+  isAccepted: boolean;
+  confirmedAt: string | null;
+}
+
 export default function History() {
   const { userProperties } = useProperty();
 
@@ -53,6 +76,12 @@ export default function History() {
   const [allPayments, setAllPayments] = useState<Payment[]>([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
+
+  // Scheduled Payments の状態
+  const [scheduledPayments, setScheduledPayments] = useState<
+    ScheduledPayment[]
+  >([]);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   // 共通の状態
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(
@@ -74,6 +103,8 @@ export default function History() {
     await fetchBillData();
     // Payment History データを取得
     await fetchPaymentData();
+    // Scheduled Payments データを取得
+    await fetchScheduledPayments();
   };
 
   const fetchBillData = async () => {
@@ -122,6 +153,23 @@ export default function History() {
     }
   };
 
+  const fetchScheduledPayments = async () => {
+    try {
+      console.log("=== SCHEDULED PAYMENTS DEBUG ===");
+      console.log("Fetching scheduled payments...");
+
+      const data = await api.getScheduledPayments();
+      console.log("Scheduled payments response:", data);
+
+      const scheduled = data.scheduled_payments || [];
+      console.log("Number of scheduled payments:", scheduled.length);
+
+      setScheduledPayments(scheduled);
+    } catch (error) {
+      console.error("Error loading scheduled payments:", error);
+    }
+  };
+
   // プロパティ選択のハンドラー
   const handlePropertyChange = (propertyId: string) => {
     console.log("=== PROPERTY CHANGE DEBUG ===");
@@ -155,10 +203,16 @@ export default function History() {
 
       // Reload all payments to update status
       fetchPaymentData();
+      fetchScheduledPayments();
     } catch (error) {
       console.error("Error accepting payment:", error);
       setPaymentMessage("Error occurred while accepting payment");
     }
+  };
+
+  const handleScheduleSuccess = () => {
+    setPaymentMessage("Payment schedule created successfully!");
+    fetchScheduledPayments();
   };
 
   // Bill History のフィルタリング
@@ -226,6 +280,13 @@ export default function History() {
         (payment) => payment.property_id === selectedProperty.property_id
       )
     : allPayments;
+
+  // Scheduled Payments のフィルタリング
+  const filteredScheduledPayments = selectedProperty
+    ? scheduledPayments.filter(
+        (payment) => payment.property_id === selectedProperty.property_id
+      )
+    : scheduledPayments;
 
   // デバッグログ
   console.log("=== RENDER DEBUG ===");
@@ -585,6 +646,134 @@ export default function History() {
               </p>
             </div>
           )}
+
+          {/* Scheduled Payments Section */}
+          <div className="mt-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-900">
+                Scheduled Payments
+              </h3>
+              <button
+                onClick={() => setShowScheduleModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Create Schedule
+              </button>
+            </div>
+
+            {filteredScheduledPayments.length === 0 ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-md p-6 text-center">
+                <p className="text-gray-600">
+                  No scheduled payments found
+                  {selectedProperty ? ` for ${selectedProperty.name}` : ""}.
+                </p>
+                <p className="text-gray-500 text-sm mt-2">
+                  Create a payment schedule to set up installments for tenants.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                <div className="grid grid-cols-7 gap-0">
+                  {/* ヘッダー行 */}
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+                    Name
+                  </div>
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                    Property
+                  </div>
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                    Bill Month
+                  </div>
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                    Due Date
+                  </div>
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20">
+                    Amount
+                  </div>
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
+                    Status
+                  </div>
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-24">
+                    Action
+                  </div>
+
+                  {/* データ行 */}
+                  {filteredScheduledPayments.map((payment) => {
+                    const status = payment.isAccepted
+                      ? "paid"
+                      : payment.paid_at
+                      ? "pending"
+                      : "unpaid";
+
+                    return (
+                      <div key={payment.payment_id} className="contents">
+                        <div className="text-left py-3">
+                          <div className="text-lg font-semibold text-gray-900">
+                            {payment.app_user.nick_name ||
+                              payment.app_user.name}
+                          </div>
+                        </div>
+                        <div className="text-gray-600 py-3 pl-9">
+                          {userProperties.find(
+                            (p) => p.property_id === payment.property_id
+                          )?.name || "Unknown Property"}
+                        </div>
+                        <div className="text-gray-600 py-3 pl-9">
+                          {payment.bill_run?.month_start
+                            ? payment.bill_run.month_start.substring(0, 7)
+                            : "N/A"}
+                        </div>
+                        <div className="text-gray-600 py-3 pl-9">
+                          {new Date(payment.due_date).toLocaleDateString()}
+                        </div>
+                        <div className="text-2xl font-bold py-3 pl-20">
+                          ${payment.amount.toLocaleString()}
+                        </div>
+                        <div className="py-3 pl-9">
+                          {status === "paid" && (
+                            <span className="text-green-600 text-sm font-medium">
+                              ✅ Paid
+                            </span>
+                          )}
+                          {status === "pending" && (
+                            <span className="text-yellow-600 text-sm font-medium">
+                              ⏳ Pending
+                            </span>
+                          )}
+                          {status === "unpaid" && (
+                            <span className="text-red-600 text-sm font-medium">
+                              ❌ Unpaid
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-center py-3 pl-6">
+                          {status === "pending" ? (
+                            <button
+                              onClick={() =>
+                                handleAcceptPayment(payment.payment_id)
+                              }
+                              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                            >
+                              Confirm
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-sm">-</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Payment Schedule Modal */}
+          <PaymentScheduleModal
+            isOpen={showScheduleModal}
+            onClose={() => setShowScheduleModal(false)}
+            onSuccess={handleScheduleSuccess}
+          />
         </div>
       )}
     </div>
