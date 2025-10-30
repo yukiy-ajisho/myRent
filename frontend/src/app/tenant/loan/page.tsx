@@ -314,25 +314,32 @@ export default function Loan() {
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      {repayment.status === "confirmed" ||
-                      (repayment.is_auto_paid === false &&
-                        Number(repayment.amount_paid || 0) > 0) ? (
-                        <span className="text-sm text-gray-500">—</span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setSelectedScheduled(repayment);
-                            setShowPayModal(true);
-                          }}
-                          className="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm"
-                        >
-                          Pay $
-                          {(
-                            Number(repayment.amount) -
-                            Number(repayment.amount_paid || 0)
-                          ).toFixed(2)}
-                        </button>
-                      )}
+                      {(() => {
+                        const remaining =
+                          Number(repayment.amount) -
+                          Number(repayment.amount_paid || 0);
+                        const hidePayButton =
+                          remaining <= 0 ||
+                          repayment.status === "confirmed" ||
+                          (repayment.is_auto_paid === false &&
+                            Number(repayment.amount_paid || 0) > 0);
+                        if (hidePayButton) {
+                          return (
+                            <span className="text-sm text-gray-500">—</span>
+                          );
+                        }
+                        return (
+                          <button
+                            onClick={() => {
+                              setSelectedScheduled(repayment);
+                              setShowPayModal(true);
+                            }}
+                            className="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm"
+                          >
+                            Pay ${remaining.toFixed(2)}
+                          </button>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
