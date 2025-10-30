@@ -34,7 +34,7 @@ interface Repayment {
   amount: number;
   repayment_date: string;
   note?: string | null;
-  status: "pending" | "confirmed";
+  status: "unpaid" | "pending" | "confirmed";
   confirmed_date?: string | null;
   processed: boolean;
   tenant?: {
@@ -50,9 +50,11 @@ interface ScheduledRepayment {
   tenant_user_id: string;
   loan_id: string;
   amount: number;
+  amount_paid?: number;
+  is_auto_paid?: boolean;
   repayment_date: string;
   note?: string | null;
-  status: "pending" | "confirmed";
+  status: "unpaid" | "pending" | "confirmed";
   confirmed_date?: string | null;
   processed: boolean;
   due_date: string;
@@ -68,6 +70,7 @@ interface ScheduledRepayment {
     created_date: string;
     note?: string | null;
   };
+  remaining_amount?: number;
 }
 
 export default function Loan() {
@@ -472,7 +475,7 @@ export default function Loan() {
             No scheduled repayments found
           </div>
         ) : (
-          <div className="grid grid-cols-7 gap-0">
+          <div className="grid grid-cols-8 gap-0">
             {/* Header */}
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
               Tenant
@@ -491,6 +494,9 @@ export default function Loan() {
             </div>
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
               Confirmed Date
+            </div>
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+              Progress
             </div>
             <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
               Action
@@ -526,38 +532,82 @@ export default function Loan() {
                   <div className="text-lg font-bold">
                     ${repayment.amount.toFixed(2)}
                   </div>
-                  {repayment.loan && (
-                    <div className="text-xs text-gray-500">
-                      Loan: ${repayment.loan.amount.toFixed(2)}
-                    </div>
-                  )}
+                  <div className="text-xs text-gray-500 mt-1">
+                    Loan: $
+                    {repayment.loan?.amount != null
+                      ? Number(repayment.loan.amount).toFixed(2)
+                      : "0.00"}
+                  </div>
                 </div>
                 <div className="py-3">
-                  <span
-                    className={`px-2 py-1 rounded text-sm font-medium ${
-                      repayment.status === "confirmed"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}
-                  >
-                    {repayment.status}
-                  </span>
+                  {(() => {
+                    const paid = Number(repayment.amount_paid || 0);
+                    const total = Number(repayment.amount);
+                    const isConfirmed = repayment.status === "confirmed";
+                    const isPending = repayment.status === "pending";
+                    const isPartial =
+                      repayment.status === "partially_paid" ||
+                      (isPending && paid > 0 && paid < total);
+
+                    const badgeClass = isConfirmed
+                      ? "bg-green-100 text-green-700"
+                      : isPartial
+                      ? "bg-blue-100 text-blue-700"
+                      : isPending
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-gray-100 text-gray-700";
+
+                    const label = isConfirmed
+                      ? "confirmed"
+                      : isPartial
+                      ? "Partially Paid"
+                      : isPending
+                      ? "pending"
+                      : "unpaid";
+
+                    return (
+                      <span
+                        className={`px-2 py-1 rounded text-sm font-medium ${badgeClass}`}
+                      >
+                        {label}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="text-sm text-gray-600 py-3">
                   {repayment.confirmed_date
                     ? new Date(repayment.confirmed_date).toLocaleDateString()
                     : "--/--/--"}
                 </div>
+                <div className="py-3 text-sm text-gray-700">
+                  <div>
+                    Paid: ${Number(repayment.amount_paid || 0).toFixed(2)}
+                    {"  "}Remaining: $
+                    {Number(
+                      repayment.remaining_amount ??
+                        repayment.amount - Number(repayment.amount_paid || 0)
+                    ).toFixed(2)}
+                    {repayment.is_auto_paid ? (
+                      <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                        auto
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
                 <div className="py-3">
-                  {repayment.status === "pending" && (
+                  {repayment.status === "pending" &&
+                  Number(repayment.amount_paid || 0) >=
+                    Number(repayment.amount) ? (
                     <button
                       onClick={() =>
                         handleConfirmRepayment(repayment.repayment_id)
                       }
-                      className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                      className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
                     >
                       Confirm
                     </button>
+                  ) : (
+                    <span className="text-sm text-gray-500">—</span>
                   )}
                 </div>
               </div>

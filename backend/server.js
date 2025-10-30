@@ -4595,6 +4595,8 @@ app.get("/repayments", async (req, res) => {
         owner_user_id,
         tenant_user_id,
         amount,
+        amount_paid,
+        is_auto_paid,
         repayment_date,
         note,
         status,
@@ -4731,6 +4733,8 @@ app.post("/repayments", async (req, res) => {
       `[SECURITY] Repayment created successfully: ${newRepayment.repayment_id}`
     );
 
+    // Note: free repayments do not auto-allocate to scheduled repayments by design
+
     // Create notification for owner (non-blocking)
     try {
       // Get tenant name
@@ -4814,11 +4818,126 @@ app.put("/repayments/:repaymentId/confirm", async (req, res) => {
     }
 
     console.log(`[SECURITY] Repayment ${repaymentId} confirmed by owner`);
+    // Note: free repayments do not propagate status to scheduled repayments
 
     res.json({ repayment: updatedRepayment });
   } catch (error) {
     console.error("Confirm repayment error:", error);
     res.status(500).json({ error: "Failed to confirm repayment" });
+  }
+});
+
+// POST /tenant/pay-scheduled-repayment - Tenant pays a specific scheduled repayment
+app.post("/tenant/pay-scheduled-repayment", async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { target_repayment_id, amount } = req.body;
+
+    if (!target_repayment_id || !amount || Number(amount) <= 0) {
+      return res.status(400).json({
+        error: "target_repayment_id and positive amount are required",
+      });
+    }
+
+    // Fetch target scheduled repayment and validate ownership and type
+    const { data: target, error: targetErr } = await supabase
+      .from("repayment")
+      .select(
+        "repayment_id, tenant_user_id, owner_user_id, amount, amount_paid, status, due_date, loan_id"
+      )
+      .eq("repayment_id", target_repayment_id)
+      .single();
+
+    if (targetErr || !target) {
+      return res.status(404).json({ error: "Target repayment not found" });
+    }
+    if (target.tenant_user_id !== tenantId) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+    if (!target.due_date || !target.loan_id) {
+      return res
+        .status(400)
+        .json({ error: "Target is not a scheduled repayment" });
+    }
+    if (target.status === "confirmed") {
+      return res.status(400).json({ error: "Already confirmed" });
+    }
+
+    const paymentAmount = Number(amount);
+    const alreadyPaid = Number(target.amount_paid || 0);
+    const targetNeeded = Math.max(0, Number(target.amount) - alreadyPaid);
+    const targetAllocation = Math.min(paymentAmount, targetNeeded);
+
+    // Update target scheduled repayment directly
+    if (targetAllocation > 0) {
+      const newPaid = alreadyPaid + targetAllocation;
+      const newStatus =
+        newPaid >= Number(target.amount) ? "pending" : "partially_paid";
+
+      await supabase
+        .from("repayment")
+        .update({
+          amount_paid: newPaid,
+          is_auto_paid: false,
+          status: newStatus,
+        })
+        .eq("repayment_id", target.repayment_id);
+    }
+
+    // Handle excess payment by cascading to future scheduled repayments for the same loan
+    let remainingAmount = paymentAmount - targetAllocation;
+
+    if (remainingAmount > 0) {
+      const { data: futureRepayments, error: futureErr } = await supabase
+        .from("repayment")
+        .select("repayment_id, amount, amount_paid, status")
+        .eq("loan_id", target.loan_id)
+        .not("due_date", "is", null)
+        .neq("status", "confirmed")
+        .gt("due_date", target.due_date)
+        .order("due_date", { ascending: true });
+
+      if (futureErr) throw futureErr;
+
+      for (const futureRepayment of futureRepayments || []) {
+        if (remainingAmount <= 0) break;
+
+        const futurePaid = Number(futureRepayment.amount_paid || 0);
+        const futureNeeded = Math.max(
+          0,
+          Number(futureRepayment.amount) - futurePaid
+        );
+        const futureAllocation = Math.min(remainingAmount, futureNeeded);
+
+        if (futureAllocation > 0) {
+          const newFuturePaid = futurePaid + futureAllocation;
+          const newFutureStatus =
+            newFuturePaid >= Number(futureRepayment.amount)
+              ? "pending"
+              : "partially_paid";
+
+          await supabase
+            .from("repayment")
+            .update({
+              amount_paid: newFuturePaid,
+              is_auto_paid: true,
+              status: newFutureStatus,
+            })
+            .eq("repayment_id", futureRepayment.repayment_id);
+
+          remainingAmount -= futureAllocation;
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      amount_applied: paymentAmount - remainingAmount,
+      remaining_credit: remainingAmount,
+    });
+  } catch (error) {
+    console.error("Pay scheduled repayment error:", error);
+    res.status(500).json({ error: "Failed to pay scheduled repayment" });
   }
 });
 
@@ -5809,6 +5928,8 @@ app.get("/owner/scheduled-repayments", async (req, res) => {
         tenant_user_id,
         loan_id,
         amount,
+        amount_paid,
+        is_auto_paid,
         repayment_date,
         note,
         status,
@@ -5873,6 +5994,8 @@ app.get("/owner/scheduled-repayments", async (req, res) => {
     // Format repayments with loan and tenant info
     const repaymentsWithDetails = repayments.map((repayment) => ({
       ...repayment,
+      remaining_amount:
+        Number(repayment.amount) - Number(repayment.amount_paid || 0),
       loan: loanMap[repayment.loan_id] || {
         loan_id: repayment.loan_id,
         amount: null,
@@ -6086,7 +6209,7 @@ app.post("/owner/create-repayment-schedule", async (req, res) => {
           amount,
           repayment_date: new Date().toISOString(),
           note: `Installment ${installment_count - i}/${installment_count}`,
-          status: "pending",
+          status: "unpaid",
           confirmed_date: null,
           processed: false,
           due_date: dueDate.toISOString().split("T")[0],
@@ -6143,6 +6266,8 @@ app.get("/tenant/scheduled-repayments", async (req, res) => {
         tenant_user_id,
         loan_id,
         amount,
+        amount_paid,
+        is_auto_paid,
         repayment_date,
         note,
         status,
@@ -6188,6 +6313,8 @@ app.get("/tenant/scheduled-repayments", async (req, res) => {
     // Format repayments with loan and owner info
     const repaymentsWithDetails = repayments.map((repayment) => ({
       ...repayment,
+      remaining_amount:
+        Number(repayment.amount) - Number(repayment.amount_paid || 0),
       loan: loanMap[repayment.loan_id] || {
         loan_id: repayment.loan_id,
         amount: null,
@@ -6196,11 +6323,26 @@ app.get("/tenant/scheduled-repayments", async (req, res) => {
       },
     }));
 
+    // Credit balance = overpayment on scheduled repayments
+    // (total amount_paid across all scheduled repayments) - (total amount required)
+    let creditBalance = 0;
+    try {
+      let totalPaid = 0;
+      let totalRequired = 0;
+      for (const r of repayments || []) {
+        totalPaid += Number(r.amount_paid || 0);
+        totalRequired += Number(r.amount);
+      }
+      creditBalance = Math.max(0, totalPaid - totalRequired);
+    } catch (creditErr) {
+      console.error("Credit balance calc error (non-critical):", creditErr);
+    }
+
     console.log(
       `[SECURITY] Found ${repaymentsWithDetails.length} scheduled repayments for tenant ${userId}`
     );
 
-    res.json({ repayments: repaymentsWithDetails });
+    res.json({ repayments: repaymentsWithDetails, creditBalance });
   } catch (error) {
     console.error("Get tenant scheduled repayments error:", error);
     res.status(500).json({ error: "Failed to fetch scheduled repayments" });

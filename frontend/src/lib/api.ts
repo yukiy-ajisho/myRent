@@ -533,6 +533,18 @@ export const api = {
     });
   },
 
+  // Tenant pays a specific scheduled repayment
+  payScheduledRepayment: (data: {
+    target_repayment_id: string;
+    amount: number;
+    note?: string;
+  }) => {
+    return apiRequest("/tenant/pay-scheduled-repayment", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
   // Tenant Repayment Schedule functions
   getTenantScheduledRepayments: () => {
     return apiRequest("/tenant/scheduled-repayments");
