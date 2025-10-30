@@ -4889,7 +4889,7 @@ app.put("/repayments/:repaymentId/confirm", async (req, res) => {
                 .eq("loan_id", confirmedLoanId)
                 .not("due_date", "is", null)
                 .neq("status", "confirmed")
-                .gt("due_date", updatedRepayment.due_date)
+                .neq("repayment_id", updatedRepayment.repayment_id)
                 .order("due_date", { ascending: true });
 
             if (
@@ -6515,62 +6515,62 @@ app.post("/owner/create-repayment-schedule", async (req, res) => {
       );
 
       if (creditRows && creditRows.length > 0) {
-        // Work on a mutable copy of repayments (sorted by due date asc already in createdRepayments)
-        const byDue = [...createdRepayments].sort((a, b) =>
-          String(a.due_date).localeCompare(String(b.due_date))
-        );
+        // Prepare mutable pools and repayment list
+        const pools = creditRows.map((c) => ({
+          allocation_id: c.allocation_id,
+          source_repayment_id: c.source_repayment_id,
+          remaining: Number(c.allocated_amount || 0),
+          loan_id: c.loan_id,
+        }));
 
-        for (const credit of creditRows) {
-          let remainingCredit = Number(credit.allocated_amount || 0);
-          if (remainingCredit <= 0) continue;
+        const byDue = [...createdRepayments]
+          .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))
+          .map((r) => ({
+            repayment_id: r.repayment_id,
+            amount: Number(r.amount),
+            paid: Number(r.amount_paid || 0),
+            status: r.status,
+          }));
 
-          for (const r of byDue) {
-            if (remainingCredit <= 0) break;
-            if (r.status === "confirmed") continue;
+        for (let i = 0; i < byDue.length; i++) {
+          let need = Math.max(0, byDue[i].amount - byDue[i].paid);
+          if (need <= 0) continue;
+          for (let j = 0; j < pools.length && need > 0; j++) {
+            let pool = pools[j].remaining;
+            if (pool <= 0) continue;
+            const use = Math.min(pool, need);
+            if (use <= 0) continue;
 
-            const need = Math.max(
-              0,
-              Number(r.amount) - Number(r.amount_paid || 0)
-            );
-            if (need <= 0) continue;
+            await supabase.from("repayment_allocation").insert({
+              source_repayment_id: pools[j].source_repayment_id,
+              target_repayment_id: byDue[i].repayment_id,
+              allocated_amount: use,
+              loan_id: loan_id,
+            });
 
-            const use = Math.min(need, remainingCredit);
-            if (use > 0) {
-              console.log(
-                `[ALLOC][SCHEDULE] apply ${use} from credit(loan=${credit.loan_id}, alloc=${credit.allocation_id}) -> repayment ${r.repayment_id}`
-              );
-              await supabase.from("repayment_allocation").insert({
-                source_repayment_id: credit.source_repayment_id,
-                target_repayment_id: r.repayment_id,
-                allocated_amount: use,
-                loan_id: loan_id,
-              });
+            byDue[i].paid += use;
+            need -= use;
+            const newStatus =
+              byDue[i].paid >= byDue[i].amount ? "pending" : "partially_paid";
+            await supabase
+              .from("repayment")
+              .update({
+                amount_paid: byDue[i].paid,
+                is_auto_paid: true,
+                status: newStatus,
+              })
+              .eq("repayment_id", byDue[i].repayment_id);
 
-              const newPaid = Number(r.amount_paid || 0) + use;
-              const newStatus =
-                newPaid >= Number(r.amount) ? "pending" : "partially_paid";
-
-              await supabase
-                .from("repayment")
-                .update({
-                  amount_paid: newPaid,
-                  is_auto_paid: true,
-                  status: newStatus,
-                })
-                .eq("repayment_id", r.repayment_id);
-
-              remainingCredit -= use;
-            }
+            pools[j].remaining = pool - use;
           }
+        }
 
-          // Reduce or clear the credit row
-          console.log(
-            `[ALLOC][SCHEDULE] credit ${credit.allocation_id} reduced to ${remainingCredit}`
-          );
+        // Persist updated pool balances
+        for (const p of pools) {
           await supabase
             .from("repayment_allocation")
-            .update({ allocated_amount: remainingCredit })
-            .eq("allocation_id", credit.allocation_id);
+            .update({ allocated_amount: p.remaining })
+            .eq("allocation_id", p.allocation_id);
         }
       }
     } catch (consumeErr) {
