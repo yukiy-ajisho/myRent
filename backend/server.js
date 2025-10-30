@@ -1976,7 +1976,7 @@ app.get("/dashboard", async (req, res) => {
       // Get all loans for this owner-tenant pair
       const { data: loans, error: loansError } = await supabase
         .from("loan")
-        .select("amount, created_date")
+        .select("amount, created_date, loan_id")
         .eq("owner_user_id", userId)
         .eq("tenant_user_id", tenant.user_id);
 
@@ -1990,6 +1990,7 @@ app.get("/dashboard", async (req, res) => {
           .eq("status", "confirmed");
 
       let loanBalance = 0;
+      let loanBalanceConfirmedOnly = 0;
       let latestActivity = null;
 
       if (!loansError && loans) {
@@ -2001,7 +2002,56 @@ app.get("/dashboard", async (req, res) => {
                 0
               )
             : 0;
-        loanBalance = totalLoans - totalRepayments;
+        loanBalanceConfirmedOnly = totalLoans - totalRepayments;
+        console.log(
+          `[DASH] tenant=${tenant.user_id} totalLoans=${totalLoans} totalRepayments=${totalRepayments} confirmedOnly=${loanBalanceConfirmedOnly}`
+        );
+
+        // Effective deductions: tenant credit only (pending/partially_paid are not deducted)
+        const loanIds = loans.map((l) => l.loan_id);
+        let partialPaidSum = 0;
+
+        // Confirmed overpay via allocations: source confirmed and (target NULL or target != source)
+        let creditSum = 0;
+        if (loanIds.length > 0) {
+          const { data: allocs, error: allocErr } = await supabase
+            .from("repayment_allocation")
+            .select(
+              "allocated_amount, source_repayment_id, target_repayment_id, loan_id"
+            )
+            .in("loan_id", loanIds);
+          if (!allocErr && allocs) {
+            const sourceIds = [
+              ...new Set(
+                allocs.map((a) => a.source_repayment_id).filter(Boolean)
+              ),
+            ];
+            let confirmedSet = new Set();
+            if (sourceIds.length > 0) {
+              const { data: srcs } = await supabase
+                .from("repayment")
+                .select("repayment_id")
+                .in("repayment_id", sourceIds)
+                .eq("status", "confirmed");
+              if (srcs) confirmedSet = new Set(srcs.map((s) => s.repayment_id));
+            }
+            const filtered = allocs.filter(
+              (a) =>
+                confirmedSet.has(a.source_repayment_id) &&
+                (a.target_repayment_id === null ||
+                  a.target_repayment_id !== a.source_repayment_id)
+            );
+            creditSum = filtered.reduce(
+              (s, a) => s + Number(a.allocated_amount || 0),
+              0
+            );
+          }
+        }
+
+        loanBalance = loanBalanceConfirmedOnly - partialPaidSum - creditSum;
+        console.log(
+          `[DASH] tenant=${tenant.user_id} balance=${loanBalance} (confirmedOnly=${loanBalanceConfirmedOnly} - partial=${partialPaidSum} - credit=${creditSum})`
+        );
 
         // Find latest activity timestamp
         if (loans.length > 0) {
@@ -2032,6 +2082,7 @@ app.get("/dashboard", async (req, res) => {
         property_id: tenant.property_id.toString(),
         property_name: tenant.property_name,
         loan_balance: loanBalance,
+        loan_balance_confirmed: loanBalanceConfirmedOnly,
         loan_last_updated: latestActivity
           ? new Date(latestActivity).toISOString()
           : null,
@@ -2119,12 +2170,102 @@ app.get("/dashboard/:propertyId", async (req, res) => {
         continue;
       }
 
+      // Loan balance (dynamic) for this tenant
+      const { data: loans, error: loansError } = await supabase
+        .from("loan")
+        .select("loan_id, amount, created_date")
+        .eq("tenant_user_id", tenant.user_id);
+
+      const { data: confirmedRepayments, error: repaymentsError } =
+        await supabase
+          .from("repayment")
+          .select("amount, amount_paid, confirmed_date, loan_id")
+          .eq("tenant_user_id", tenant.user_id)
+          .eq("status", "confirmed");
+
+      let loanBalance = 0;
+      let loanBalanceConfirmedOnly = 0;
+      let latestActivity = null;
+
+      if (!loansError && loans) {
+        const totalLoans = loans.reduce((sum, loan) => sum + loan.amount, 0);
+        const totalRepayments =
+          confirmedRepayments && !repaymentsError
+            ? confirmedRepayments.reduce(
+                (sum, repayment) => sum + repayment.amount,
+                0
+              )
+            : 0;
+        loanBalanceConfirmedOnly = totalLoans - totalRepayments;
+
+        // Confirmed overpay via allocations: source confirmed and (target NULL or target != source)
+        let creditSum = 0;
+        if (loans.length > 0) {
+          const loanIds = loans.map((l) => l.loan_id);
+          const { data: allocs, error: allocErr } = await supabase
+            .from("repayment_allocation")
+            .select(
+              "allocated_amount, source_repayment_id, target_repayment_id, loan_id"
+            )
+            .in("loan_id", loanIds);
+          if (!allocErr && allocs) {
+            const sourceIds = [
+              ...new Set(
+                allocs.map((a) => a.source_repayment_id).filter(Boolean)
+              ),
+            ];
+            let confirmedSet = new Set();
+            if (sourceIds.length > 0) {
+              const { data: srcs } = await supabase
+                .from("repayment")
+                .select("repayment_id")
+                .in("repayment_id", sourceIds)
+                .eq("status", "confirmed");
+              if (srcs) confirmedSet = new Set(srcs.map((s) => s.repayment_id));
+            }
+            const filtered = allocs.filter(
+              (a) =>
+                confirmedSet.has(a.source_repayment_id) &&
+                (a.target_repayment_id === null ||
+                  a.target_repayment_id !== a.source_repayment_id)
+            );
+            creditSum = filtered.reduce(
+              (s, a) => s + Number(a.allocated_amount || 0),
+              0
+            );
+          }
+        }
+
+        loanBalance = loanBalanceConfirmedOnly - creditSum;
+
+        // Latest activity from loans/confirmed repayments
+        if (loans.length > 0) {
+          const latestLoanDate = Math.max(
+            ...loans.map((l) => new Date(l.created_date).getTime())
+          );
+          latestActivity = latestLoanDate;
+        }
+        if (confirmedRepayments && confirmedRepayments.length > 0) {
+          const latestRepaymentDate = Math.max(
+            ...confirmedRepayments.map((r) =>
+              new Date(r.confirmed_date).getTime()
+            )
+          );
+          if (!latestActivity || latestRepaymentDate > latestActivity) {
+            latestActivity = latestRepaymentDate;
+          }
+        }
+      }
+
       dashboardData.push({
         user_id: tenant.user_id,
         name: tenant.name,
         email: tenant.email,
         current_balance: latestLedger ? latestLedger.amount : 0,
         last_updated: latestLedger ? latestLedger.posted_at : null,
+        loan_balance: loanBalance,
+        loan_balance_confirmed: loanBalanceConfirmedOnly,
+        loan_last_updated: latestActivity ? new Date(latestActivity).toISOString() : null,
       });
     }
 
