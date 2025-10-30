@@ -2265,7 +2265,9 @@ app.get("/dashboard/:propertyId", async (req, res) => {
         last_updated: latestLedger ? latestLedger.posted_at : null,
         loan_balance: loanBalance,
         loan_balance_confirmed: loanBalanceConfirmedOnly,
-        loan_last_updated: latestActivity ? new Date(latestActivity).toISOString() : null,
+        loan_last_updated: latestActivity
+          ? new Date(latestActivity).toISOString()
+          : null,
       });
     }
 
