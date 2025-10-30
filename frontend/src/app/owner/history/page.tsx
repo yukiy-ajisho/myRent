@@ -45,6 +45,8 @@ interface ScheduledPayment {
   user_id: string;
   property_id: string;
   amount: number;
+  amount_paid: number;
+  is_auto_paid: boolean;
   note: string;
   paid_at: string | null;
   due_date: string;
@@ -182,10 +184,8 @@ export default function History() {
       return;
     }
 
-    // 文字列を数値に変換してから比較
-    const property = userProperties.find(
-      (p) => p.property_id === parseInt(propertyId)
-    );
+    // Find property by ID
+    const property = userProperties.find((p) => p.property_id === propertyId);
     console.log("Found property:", property);
     setSelectedProperty(property || null);
   };
@@ -673,7 +673,7 @@ export default function History() {
               </div>
             ) : (
               <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                <div className="grid grid-cols-7 gap-0">
+                <div className="grid grid-cols-8 gap-0">
                   {/* ヘッダー行 */}
                   <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
                     Name
@@ -687,23 +687,27 @@ export default function History() {
                   <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
                     Due Date
                   </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-20">
-                    Amount
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-12">
+                    Scheduled
+                  </div>
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-16">
+                    Paid
                   </div>
                   <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
                     Status
                   </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-24">
+                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-16">
                     Action
                   </div>
 
                   {/* データ行 */}
                   {filteredScheduledPayments.map((payment) => {
-                    const status = payment.isAccepted
-                      ? "paid"
-                      : payment.paid_at
-                      ? "pending"
-                      : "unpaid";
+                    const isPaid =
+                      payment.isAccepted ||
+                      payment.amount_paid >= payment.amount;
+                    const isPartiallyPaid =
+                      (payment.amount_paid || 0) > 0 && !isPaid;
+                    const isPending = payment.paid_at && !payment.isAccepted;
 
                     return (
                       <div key={payment.payment_id} className="contents">
@@ -726,28 +730,46 @@ export default function History() {
                         <div className="text-gray-600 py-3 pl-9">
                           {new Date(payment.due_date).toLocaleDateString()}
                         </div>
-                        <div className="text-2xl font-bold py-3 pl-20">
-                          ${payment.amount.toLocaleString()}
+                        <div className="py-3 pl-12">
+                          <div className="text-lg font-bold">
+                            ${payment.amount.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="py-3 pl-16">
+                          <div className="text-lg font-bold text-green-600">
+                            ${(payment.amount_paid || 0).toFixed(2)}
+                            {payment.is_auto_paid &&
+                              (payment.amount_paid || 0) > 0 && (
+                                <span className="ml-1 text-xs text-blue-600">
+                                  💰
+                                </span>
+                              )}
+                          </div>
                         </div>
                         <div className="py-3 pl-9">
-                          {status === "paid" && (
+                          {isPaid && (
                             <span className="text-green-600 text-sm font-medium">
                               ✅ Paid
                             </span>
                           )}
-                          {status === "pending" && (
+                          {isPending && (
                             <span className="text-yellow-600 text-sm font-medium">
                               ⏳ Pending
                             </span>
                           )}
-                          {status === "unpaid" && (
+                          {isPartiallyPaid && (
+                            <span className="text-blue-600 text-sm font-medium">
+                              🔵 Partial
+                            </span>
+                          )}
+                          {!isPaid && !isPending && !isPartiallyPaid && (
                             <span className="text-red-600 text-sm font-medium">
                               ❌ Unpaid
                             </span>
                           )}
                         </div>
                         <div className="text-center py-3 pl-6">
-                          {status === "pending" ? (
+                          {isPending ? (
                             <button
                               onClick={() =>
                                 handleAcceptPayment(payment.payment_id)

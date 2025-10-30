@@ -3647,7 +3647,7 @@ app.get("/tenant-payments", async (req, res) => {
         property: up.property,
       }));
 
-    // 3. テナントの支払い履歴取得
+    // 3. テナントの支払い履歴取得 (free payments only, due_date IS NULL)
     const { data: payments, error: paymentsError } = await supabase
       .from("payment")
       .select(
@@ -3664,6 +3664,7 @@ app.get("/tenant-payments", async (req, res) => {
       `
       )
       .eq("user_id", userId)
+      .is("due_date", null)
       .order("paid_at", { ascending: false });
 
     if (paymentsError) {
@@ -5123,6 +5124,8 @@ app.get("/owner/scheduled-payments", async (req, res) => {
         user_id,
         property_id,
         amount,
+        amount_paid,
+        is_auto_paid,
         note,
         paid_at,
         due_date,
@@ -5439,6 +5442,255 @@ app.post("/owner/create-payment-schedule", async (req, res) => {
     console.error("Error details:", error.message);
     console.error("Error stack:", error.stack);
     res.status(500).json({ error: "Failed to create payment schedule" });
+  }
+});
+
+// ==========================================
+// TENANT SCHEDULED PAYMENT ENDPOINTS
+// ==========================================
+
+// GET /tenant/scheduled-payments - Get tenant's scheduled payments with credit balance
+app.get("/tenant/scheduled-payments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(
+      `[SECURITY] Tenant ${userId} requesting scheduled payments with credit balance`
+    );
+
+    // Get tenant's scheduled payments (where due_date IS NOT NULL)
+    const { data: payments, error: paymentsError } = await supabase
+      .from("payment")
+      .select(
+        `
+        payment_id,
+        user_id,
+        property_id,
+        amount,
+        amount_paid,
+        is_auto_paid,
+        note,
+        paid_at,
+        due_date,
+        bill_run_id
+      `
+      )
+      .eq("user_id", userId)
+      .not("due_date", "is", null)
+      .order("due_date", { ascending: true });
+
+    if (paymentsError) throw paymentsError;
+
+    // Get property data for all payments
+    const propertyIds = [
+      ...new Set(payments.map((p) => p.property_id).filter(Boolean)),
+    ];
+    let propertyMap = {};
+
+    if (propertyIds.length > 0) {
+      const { data: properties, error: propError } = await supabase
+        .from("property")
+        .select("property_id, name")
+        .in("property_id", propertyIds);
+
+      if (!propError && properties) {
+        properties.forEach((p) => {
+          propertyMap[p.property_id] = {
+            property_id: p.property_id,
+            name: p.name,
+          };
+        });
+      }
+    }
+
+    // Get bill run data separately
+    const billRunIds = [
+      ...new Set(payments.map((p) => p.bill_run_id).filter(Boolean)),
+    ];
+    let billRunMap = {};
+
+    if (billRunIds.length > 0) {
+      const { data: billRuns, error: billRunsError } = await supabase
+        .from("bill_run")
+        .select("bill_run_id, month_start")
+        .in("bill_run_id", billRunIds);
+
+      if (!billRunsError && billRuns) {
+        billRuns.forEach((br) => {
+          billRunMap[br.bill_run_id] = {
+            bill_run_id: br.bill_run_id,
+            month_start: br.month_start,
+          };
+        });
+      }
+    }
+
+    // Calculate credit balance (sum of all overpayments)
+    const creditBalance = payments.reduce((sum, p) => {
+      const remaining = (p.amount_paid || 0) - p.amount;
+      return remaining > 0 ? sum + remaining : sum;
+    }, 0);
+
+    // Add property and bill run info to payments
+    const paymentsWithDetails = payments.map((payment) => ({
+      ...payment,
+      property: propertyMap[payment.property_id] || {
+        property_id: payment.property_id,
+        name: "Unknown",
+      },
+      bill_run: billRunMap[payment.bill_run_id] || {
+        bill_run_id: payment.bill_run_id,
+        month_start: null,
+      },
+    }));
+
+    console.log(
+      `[SECURITY] Found ${paymentsWithDetails.length} scheduled payments for tenant ${userId}`
+    );
+    console.log(`[SECURITY] Credit balance: $${creditBalance}`);
+
+    res.json({
+      payments: paymentsWithDetails,
+      creditBalance: creditBalance,
+    });
+  } catch (error) {
+    console.error("Get tenant scheduled payments error:", error);
+    res.status(500).json({ error: "Failed to fetch scheduled payments" });
+  }
+});
+
+// POST /tenant/pay-scheduled-payment - Pay with auto-credit allocation
+app.post("/tenant/pay-scheduled-payment", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { amount } = req.body;
+
+    console.log(`[SECURITY] Tenant ${userId} attempting payment of $${amount}`);
+
+    // Validation
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: "Invalid payment amount" });
+    }
+
+    // Get all unpaid/partially paid scheduled payments sorted by due_date
+    const { data: scheduledPayments, error: fetchError } = await supabase
+      .from("payment")
+      .select(
+        "payment_id, amount, amount_paid, due_date, property_id, bill_run_id"
+      )
+      .eq("user_id", userId)
+      .not("due_date", "is", null)
+      .order("due_date", { ascending: true });
+
+    if (fetchError) throw fetchError;
+
+    // Filter to only unpaid/partially paid
+    const unpaidPayments = scheduledPayments.filter(
+      (p) => (p.amount_paid || 0) < p.amount
+    );
+
+    if (unpaidPayments.length === 0) {
+      return res.status(400).json({
+        error: "No unpaid scheduled payments found",
+      });
+    }
+
+    // Create the source payment record (tenant's actual payment)
+    const { data: sourcePayment, error: sourceError } = await supabase
+      .from("payment")
+      .insert({
+        user_id: userId,
+        property_id: unpaidPayments[0].property_id, // Use first unpaid payment's property
+        amount,
+        note: "Payment towards scheduled bills",
+        paid_at: new Date().toISOString(),
+        due_date: null, // This is a free payment, not scheduled
+        bill_run_id: null,
+      })
+      .select()
+      .single();
+
+    if (sourceError) throw sourceError;
+
+    console.log(
+      `[SECURITY] Created source payment ${sourcePayment.payment_id} for $${amount}`
+    );
+
+    // Auto-allocate the payment to unpaid scheduled payments
+    let remainingAmount = amount;
+    const allocations = [];
+    const updatedPayments = [];
+
+    for (const scheduledPayment of unpaidPayments) {
+      if (remainingAmount <= 0) break;
+
+      const amountOwed =
+        scheduledPayment.amount - (scheduledPayment.amount_paid || 0);
+      const amountToApply = Math.min(remainingAmount, amountOwed);
+
+      // Create allocation record
+      allocations.push({
+        source_payment_id: sourcePayment.payment_id,
+        target_payment_id: scheduledPayment.payment_id,
+        amount_applied: amountToApply,
+        is_auto_applied: true,
+      });
+
+      // Update the scheduled payment's amount_paid
+      const newAmountPaid = (scheduledPayment.amount_paid || 0) + amountToApply;
+
+      updatedPayments.push({
+        payment_id: scheduledPayment.payment_id,
+        amount_paid: newAmountPaid,
+        is_auto_paid: true,
+      });
+
+      remainingAmount -= amountToApply;
+
+      console.log(
+        `[SECURITY] Allocated $${amountToApply} to payment ${scheduledPayment.payment_id}`
+      );
+    }
+
+    // Insert all allocations
+    const { error: allocError } = await supabase
+      .from("payment_allocation")
+      .insert(allocations);
+
+    if (allocError) throw allocError;
+
+    // Update all scheduled payments
+    for (const update of updatedPayments) {
+      const { error: updateError } = await supabase
+        .from("payment")
+        .update({
+          amount_paid: update.amount_paid,
+          is_auto_paid: update.is_auto_paid,
+        })
+        .eq("payment_id", update.payment_id);
+
+      if (updateError) throw updateError;
+    }
+
+    console.log(
+      `[SECURITY] Payment of $${amount} successfully allocated to ${updatedPayments.length} scheduled payments`
+    );
+    console.log(`[SECURITY] Remaining credit: $${remainingAmount}`);
+
+    res.json({
+      success: true,
+      source_payment_id: sourcePayment.payment_id,
+      amount_paid: amount,
+      payments_covered: updatedPayments.length,
+      remaining_credit: remainingAmount,
+      allocations: allocations.map((a) => ({
+        target_payment_id: a.target_payment_id,
+        amount_applied: a.amount_applied,
+      })),
+    });
+  } catch (error) {
+    console.error("Pay scheduled payment error:", error);
+    res.status(500).json({ error: "Failed to process payment" });
   }
 });
 

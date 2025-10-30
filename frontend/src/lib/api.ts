@@ -492,4 +492,16 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // Tenant Payment Schedule functions
+  getTenantScheduledPayments: () => {
+    return apiRequest("/tenant/scheduled-payments");
+  },
+
+  payScheduledPayment: (amount: number) => {
+    return apiRequest("/tenant/pay-scheduled-payment", {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    });
+  },
 };
