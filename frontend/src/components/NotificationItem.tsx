@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { api } from "@/lib/api";
 import type { Notification } from "./NotificationIcon";
 
@@ -42,6 +43,58 @@ export function NotificationItem({
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
     return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
+
+  // Extract payment date from message and calculate countdown
+  const countdownInfo = useMemo(() => {
+    // Only process payment_reminder notifications
+    if (notification.type !== "payment_reminder") {
+      return null;
+    }
+
+    // Parse date from message: "Your bill is due on November 5, 2025 for [Property]"
+    // Try to extract date string like "November 5, 2025"
+    const dateMatch = notification.message.match(
+      /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})/
+    );
+
+    if (!dateMatch) {
+      return null;
+    }
+
+    try {
+      const dueDate = new Date(dateMatch[0]);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      dueDate.setHours(0, 0, 0, 0);
+
+      const diffTime = dueDate.getTime() - today.getTime();
+      const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      let text = "";
+      let className = "";
+
+      if (daysRemaining < 0) {
+        text = `Overdue by ${Math.abs(daysRemaining)} day${
+          Math.abs(daysRemaining) !== 1 ? "s" : ""
+        }`;
+        className = "bg-red-100 text-red-800 border-red-200";
+      } else if (daysRemaining === 0) {
+        text = "Due today";
+        className = "bg-orange-100 text-orange-800 border-orange-200";
+      } else if (daysRemaining === 1) {
+        text = "Due tomorrow";
+        className = "bg-yellow-100 text-yellow-800 border-yellow-200";
+      } else {
+        text = `Due in ${daysRemaining} days`;
+        className = "bg-blue-100 text-blue-800 border-blue-200";
+      }
+
+      return { text, className, daysRemaining };
+    } catch (error) {
+      console.error("Error parsing payment date:", error);
+      return null;
+    }
+  }, [notification.message, notification.type]);
 
   // Handle click
   const handleClick = async () => {
@@ -91,6 +144,17 @@ export function NotificationItem({
           <p className="text-sm text-gray-600 mt-1 line-clamp-2">
             {notification.message}
           </p>
+
+          {/* Countdown Badge (for payment reminders) */}
+          {countdownInfo && (
+            <div className="mt-2">
+              <span
+                className={`inline-block px-2 py-1 text-xs font-semibold rounded border ${countdownInfo.className}`}
+              >
+                {countdownInfo.text}
+              </span>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="flex items-center justify-between mt-2">

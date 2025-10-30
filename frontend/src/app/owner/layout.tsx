@@ -40,6 +40,12 @@ const navigationItems = [
   //   href: "/owner/calculate",
   // },
   { id: "history", label: "History", icon: FileText, href: "/owner/history" },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Settings,
+    href: "/owner/settings",
+  },
 ];
 
 // プロパティ選択コンポーネント

@@ -461,6 +461,25 @@ export const api = {
     });
   },
 
+  // Property billing settings functions
+  getPropertyBillingSettings: (propertyId?: string) => {
+    const url = propertyId
+      ? `/owner/property-billing-settings?property_id=${propertyId}`
+      : "/owner/property-billing-settings";
+    return apiRequest(url);
+  },
+
+  updatePropertyBillingSettings: (data: {
+    property_id: string | number;
+    payment_day: number;
+    notification_lead_days: number;
+  }) => {
+    return apiRequest("/owner/property-billing-settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
   // Tenant functions
   getOwnerTenants: ({ propertyId }: { propertyId?: string }) => {
     const url = propertyId ? `/rent-data/${propertyId}` : "/rent-data";
