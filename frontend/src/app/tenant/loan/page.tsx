@@ -36,9 +36,36 @@ interface Repayment {
   };
 }
 
+interface ScheduledRepayment {
+  repayment_id: string;
+  owner_user_id: string;
+  tenant_user_id: string;
+  loan_id: string;
+  amount: number;
+  repayment_date: string;
+  note?: string | null;
+  status: "pending" | "confirmed";
+  confirmed_date?: string | null;
+  due_date: string;
+  owner?: {
+    user_id: string;
+    name: string;
+    email: string;
+  };
+  loan: {
+    loan_id: string;
+    amount: number;
+    created_date: string;
+    note?: string | null;
+  };
+}
+
 export default function Loan() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [repayments, setRepayments] = useState<Repayment[]>([]);
+  const [scheduledRepayments, setScheduledRepayments] = useState<
+    ScheduledRepayment[]
+  >([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingRepayments, setIsLoadingRepayments] = useState(false);
   const [showRepaymentModal, setShowRepaymentModal] = useState(false);
@@ -67,6 +94,15 @@ export default function Loan() {
     }
   }, []);
 
+  const fetchScheduledRepayments = useCallback(async () => {
+    try {
+      const data = await api.getTenantScheduledRepayments();
+      setScheduledRepayments(data.repayments || []);
+    } catch (error) {
+      console.error("Error loading scheduled repayments:", error);
+    }
+  }, []);
+
   // Get unique owners from loans (for repayment modal dropdown)
   const uniqueOwners = useMemo(() => {
     const ownersMap = new Map();
@@ -82,7 +118,8 @@ export default function Loan() {
   useEffect(() => {
     fetchLoans();
     fetchRepayments();
-  }, [fetchLoans, fetchRepayments]);
+    fetchScheduledRepayments();
+  }, [fetchLoans, fetchRepayments, fetchScheduledRepayments]);
 
   return (
     <div className="container mx-auto py-6 px-4">
@@ -154,9 +191,98 @@ export default function Loan() {
         )}
       </div>
 
-      {/* Repayments Section */}
+      {/* Scheduled Repayments Section */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mb-8">
+        <h2 className="text-xl font-bold mb-4 text-gray-800">
+          Scheduled Repayments
+        </h2>
+        {scheduledRepayments.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No scheduled repayments found
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Owner
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Loan Created
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Due Date
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Amount
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {scheduledRepayments.map((repayment) => (
+                  <tr
+                    key={repayment.repayment_id}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-gray-900">
+                        {repayment.owner?.name || "Unknown"}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {repayment.owner?.email || "N/A"}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {repayment.loan?.created_date
+                        ? new Date(
+                            repayment.loan.created_date
+                          ).toLocaleDateString()
+                        : "N/A"}
+                      {repayment.loan?.note && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {repayment.loan.note}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {new Date(repayment.due_date).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-4 text-gray-900 font-semibold">
+                      ${repayment.amount.toFixed(2)}
+                      {repayment.loan && (
+                        <div className="text-xs text-gray-500">
+                          Loan: ${repayment.loan.amount.toFixed(2)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`px-2 py-1 rounded text-sm font-medium ${
+                          repayment.status === "confirmed"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {repayment.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Free Repayments Section */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <h2 className="text-xl font-bold mb-4 text-gray-800">My Repayments</h2>
+        <h2 className="text-xl font-bold mb-4 text-gray-800">
+          Free Repayments
+        </h2>
         {isLoadingRepayments ? (
           <div className="text-center py-8 text-gray-500">
             Loading repayments...
@@ -247,6 +373,7 @@ export default function Loan() {
           onSuccess={() => {
             setShowRepaymentModal(false);
             fetchRepayments();
+            fetchScheduledRepayments();
           }}
         />
       )}

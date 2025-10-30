@@ -504,4 +504,37 @@ export const api = {
       body: JSON.stringify({ amount }),
     });
   },
+
+  // Owner Repayment Schedule functions
+  getLoansForSchedule: () => {
+    return apiRequest("/owner/loans-for-schedule");
+  },
+
+  getScheduledRepayments: () => {
+    return apiRequest("/owner/scheduled-repayments");
+  },
+
+  createRepaymentSchedule: (data: {
+    loan_id: string;
+    schedule_type:
+      | "month_start"
+      | "month_end"
+      | "specific_date"
+      | "installment";
+    specific_month?: string;
+    specific_date?: number;
+    installment_count?: number;
+    installment_start_date?: string;
+    installment_period_days?: number;
+  }) => {
+    return apiRequest("/owner/create-repayment-schedule", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Tenant Repayment Schedule functions
+  getTenantScheduledRepayments: () => {
+    return apiRequest("/tenant/scheduled-repayments");
+  },
 };

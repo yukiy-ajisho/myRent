@@ -4586,7 +4586,7 @@ app.get("/repayments", async (req, res) => {
 
     console.log(`[SECURITY] User ${userId} requesting repayments`);
 
-    // Get all repayments where this user is the owner
+    // Get all free repayments where this user is the owner (due_date IS NULL AND loan_id IS NULL)
     const { data: repayments, error } = await supabase
       .from("repayment")
       .select(
@@ -4608,6 +4608,8 @@ app.get("/repayments", async (req, res) => {
         `
       )
       .eq("owner_user_id", userId)
+      .is("due_date", null)
+      .is("loan_id", null)
       .order("repayment_date", { ascending: false });
 
     if (error) throw error;
@@ -4632,7 +4634,7 @@ app.get("/tenant/repayments", async (req, res) => {
 
     console.log(`[SECURITY] User ${userId} requesting tenant repayments`);
 
-    // Get all repayments where this user is the tenant
+    // Get all free repayments where this user is the tenant (due_date IS NULL AND loan_id IS NULL)
     const { data: repayments, error } = await supabase
       .from("repayment")
       .select(
@@ -4653,6 +4655,8 @@ app.get("/tenant/repayments", async (req, res) => {
         `
       )
       .eq("tenant_user_id", userId)
+      .is("due_date", null)
+      .is("loan_id", null)
       .order("repayment_date", { ascending: false });
 
     if (error) throw error;
@@ -4686,7 +4690,7 @@ app.post("/repayments", async (req, res) => {
         .json({ error: "owner_user_id and amount are required" });
     }
 
-    // Create new repayment
+    // Create new free repayment (due_date and loan_id are NULL)
     const { data: newRepayment, error } = await supabase
       .from("repayment")
       .insert({
@@ -4698,6 +4702,8 @@ app.post("/repayments", async (req, res) => {
         status: "pending",
         confirmed_date: null,
         processed: false,
+        due_date: null,
+        loan_id: null,
       })
       .select(
         `
@@ -5691,6 +5697,513 @@ app.post("/tenant/pay-scheduled-payment", async (req, res) => {
   } catch (error) {
     console.error("Pay scheduled payment error:", error);
     res.status(500).json({ error: "Failed to process payment" });
+  }
+});
+
+// ============================================
+// REPAYMENT SCHEDULE ENDPOINTS
+// ============================================
+
+// GET /owner/loans-for-schedule
+app.get("/owner/loans-for-schedule", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting loans for schedule creation`
+    );
+
+    // Get all loans where this user is the owner
+    const { data: loans, error: loansError } = await supabase
+      .from("loan")
+      .select(
+        `
+        loan_id,
+        owner_user_id,
+        tenant_user_id,
+        amount,
+        created_date,
+        note,
+        tenant:tenant_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .eq("owner_user_id", userId)
+      .order("created_date", { ascending: false });
+
+    if (loansError) throw loansError;
+
+    // Get nicknames for tenants
+    const tenantIds = [...new Set(loans.map((l) => l.tenant_user_id))];
+    let nicknames = {};
+
+    if (tenantIds.length > 0) {
+      const { data: ownerTenants, error: nickError } = await supabase
+        .from("owner_tenant")
+        .select("tenant_id, nick_name")
+        .eq("owner_id", userId)
+        .in("tenant_id", tenantIds);
+
+      if (!nickError && ownerTenants) {
+        nicknames = ownerTenants.reduce((acc, ot) => {
+          acc[ot.tenant_id] = ot.nick_name;
+          return acc;
+        }, {});
+      }
+    }
+
+    // Check which loans already have scheduled repayments
+    const loanIds = loans.map((l) => l.loan_id);
+    const { data: existingRepayments, error: repaymentsError } = await supabase
+      .from("repayment")
+      .select("loan_id")
+      .in("loan_id", loanIds)
+      .not("due_date", "is", null);
+
+    const scheduledLoanIds = existingRepayments
+      ? [...new Set(existingRepayments.map((r) => r.loan_id))]
+      : [];
+
+    // Format loans with tenant info and has_schedule flag
+    const loansWithTenants = loans.map((loan) => ({
+      loan_id: loan.loan_id,
+      amount: loan.amount,
+      created_date: loan.created_date,
+      note: loan.note,
+      tenant: {
+        user_id: loan.tenant_user_id,
+        name: loan.tenant?.name || "Unknown",
+        nick_name: nicknames[loan.tenant_user_id] || null,
+      },
+      has_schedule: scheduledLoanIds.includes(loan.loan_id),
+    }));
+
+    console.log(
+      `[SECURITY] Found ${loansWithTenants.length} loans for user ${userId}`
+    );
+
+    res.json({ loans: loansWithTenants });
+  } catch (error) {
+    console.error("Get loans for schedule error:", error);
+    res.status(500).json({ error: "Failed to fetch loans" });
+  }
+});
+
+// GET /owner/scheduled-repayments
+app.get("/owner/scheduled-repayments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting scheduled repayments`);
+
+    // Get scheduled repayments (where due_date IS NOT NULL)
+    const { data: repayments, error: repaymentsError } = await supabase
+      .from("repayment")
+      .select(
+        `
+        repayment_id,
+        owner_user_id,
+        tenant_user_id,
+        loan_id,
+        amount,
+        repayment_date,
+        note,
+        status,
+        confirmed_date,
+        processed,
+        due_date,
+        tenant:tenant_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .eq("owner_user_id", userId)
+      .not("due_date", "is", null)
+      .order("due_date", { ascending: true });
+
+    if (repaymentsError) throw repaymentsError;
+
+    // Get loan data separately
+    const loanIds = [
+      ...new Set(repayments.map((r) => r.loan_id).filter(Boolean)),
+    ];
+    let loanMap = {};
+
+    if (loanIds.length > 0) {
+      const { data: loans, error: loansError } = await supabase
+        .from("loan")
+        .select("loan_id, amount, created_date, note")
+        .in("loan_id", loanIds);
+
+      if (!loansError && loans) {
+        loans.forEach((l) => {
+          loanMap[l.loan_id] = {
+            amount: l.amount,
+            created_date: l.created_date,
+            note: l.note,
+          };
+        });
+      }
+    }
+
+    // Get nicknames
+    const tenantIds = [...new Set(repayments.map((r) => r.tenant_user_id))];
+    let nicknames = {};
+
+    if (tenantIds.length > 0) {
+      const { data: ownerTenants, error: nickError } = await supabase
+        .from("owner_tenant")
+        .select("tenant_id, nick_name")
+        .eq("owner_id", userId)
+        .in("tenant_id", tenantIds);
+
+      if (!nickError && ownerTenants) {
+        nicknames = ownerTenants.reduce((acc, ot) => {
+          acc[ot.tenant_id] = ot.nick_name;
+          return acc;
+        }, {});
+      }
+    }
+
+    // Format repayments with loan and tenant info
+    const repaymentsWithDetails = repayments.map((repayment) => ({
+      ...repayment,
+      loan: loanMap[repayment.loan_id] || {
+        loan_id: repayment.loan_id,
+        amount: null,
+        created_date: null,
+        note: null,
+      },
+      tenant: {
+        ...repayment.tenant,
+        nick_name: nicknames[repayment.tenant_user_id] || null,
+      },
+    }));
+
+    console.log(
+      `[SECURITY] Found ${repaymentsWithDetails.length} scheduled repayments for user ${userId}`
+    );
+
+    res.json({ scheduled_repayments: repaymentsWithDetails });
+  } catch (error) {
+    console.error("Get scheduled repayments error:", error);
+    res.status(500).json({ error: "Failed to fetch scheduled repayments" });
+  }
+});
+
+// POST /owner/create-repayment-schedule
+app.post("/owner/create-repayment-schedule", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      loan_id,
+      schedule_type,
+      specific_month,
+      specific_date,
+      installment_count,
+      installment_start_date,
+      installment_period_days,
+    } = req.body;
+
+    console.log(`[SECURITY] User ${userId} creating repayment schedule`);
+    console.log("Schedule params:", {
+      loan_id,
+      schedule_type,
+      specific_month,
+      specific_date,
+      installment_count,
+      installment_start_date,
+      installment_period_days,
+    });
+
+    // Get loan details
+    const { data: loan, error: loanError } = await supabase
+      .from("loan")
+      .select(
+        "loan_id, owner_user_id, tenant_user_id, amount, created_date, note"
+      )
+      .eq("loan_id", loan_id)
+      .single();
+
+    if (loanError || !loan) {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+
+    // Validate owner has access to this loan
+    if (loan.owner_user_id !== userId) {
+      return res.status(403).json({ error: "Access denied to this loan" });
+    }
+
+    // Check if schedule already exists for this loan
+    const { data: existingRepayments, error: checkError } = await supabase
+      .from("repayment")
+      .select("repayment_id")
+      .eq("loan_id", loan_id)
+      .not("due_date", "is", null)
+      .limit(1);
+
+    if (checkError) throw checkError;
+
+    if (existingRepayments && existingRepayments.length > 0) {
+      console.log(`[SECURITY] Schedule already exists for loan ${loan_id}`);
+      return res.status(400).json({
+        error: "Repayment schedule already exists for this loan",
+      });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const total_amount = loan.amount;
+    let repayments = [];
+
+    if (schedule_type === "month_start") {
+      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      repayments = [
+        {
+          owner_user_id: loan.owner_user_id,
+          tenant_user_id: loan.tenant_user_id,
+          loan_id: loan.loan_id,
+          amount: total_amount,
+          repayment_date: new Date().toISOString(),
+          note: loan.note || "Repayment schedule",
+          status: "pending",
+          confirmed_date: null,
+          processed: false,
+          due_date: nextMonth.toISOString().split("T")[0],
+        },
+      ];
+    } else if (schedule_type === "month_end") {
+      const lastDayOfMonth = new Date(
+        today.getFullYear(),
+        today.getMonth() + 1,
+        0
+      );
+      let dueDate = lastDayOfMonth;
+      if (today.getDate() === lastDayOfMonth.getDate()) {
+        dueDate = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+      }
+      repayments = [
+        {
+          owner_user_id: loan.owner_user_id,
+          tenant_user_id: loan.tenant_user_id,
+          loan_id: loan.loan_id,
+          amount: total_amount,
+          repayment_date: new Date().toISOString(),
+          note: loan.note || "Repayment schedule",
+          status: "pending",
+          confirmed_date: null,
+          processed: false,
+          due_date: dueDate.toISOString().split("T")[0],
+        },
+      ];
+    } else if (schedule_type === "specific_date") {
+      if (!specific_month || specific_date === undefined) {
+        return res.status(400).json({
+          error: "Month and date are required for specific_date schedule",
+        });
+      }
+      const [year, month] = specific_month.split("-").map(Number);
+      const dueDate = new Date(year, month - 1, specific_date);
+      const lastDay = new Date(year, month, 0).getDate();
+      if (specific_date > lastDay) {
+        dueDate.setDate(lastDay);
+      }
+      const todayDate = new Date(today);
+      todayDate.setHours(0, 0, 0, 0);
+      dueDate.setHours(0, 0, 0, 0);
+      if (dueDate < todayDate) {
+        return res
+          .status(400)
+          .json({ error: "Cannot set repayment schedule for past dates" });
+      }
+      repayments = [
+        {
+          owner_user_id: loan.owner_user_id,
+          tenant_user_id: loan.tenant_user_id,
+          loan_id: loan.loan_id,
+          amount: total_amount,
+          repayment_date: new Date().toISOString(),
+          note: loan.note || "Repayment schedule",
+          status: "pending",
+          confirmed_date: null,
+          processed: false,
+          due_date: dueDate.toISOString().split("T")[0],
+        },
+      ];
+    } else if (schedule_type === "installment") {
+      if (installment_count < 2) {
+        return res.status(400).json({
+          error:
+            "Installment count must be at least 2. Use 'Month Start', 'Month End', or 'Specific Date' for single payment.",
+        });
+      }
+      if (
+        !installment_period_days ||
+        installment_period_days < 1 ||
+        installment_period_days > 365
+      ) {
+        return res.status(400).json({
+          error: "Payment period must be between 1 and 365 days",
+        });
+      }
+      if (!installment_start_date) {
+        return res.status(400).json({
+          error: "Start date is required for installment schedule",
+        });
+      }
+      const [year, month, day] = installment_start_date.split("-").map(Number);
+      const startDate = new Date(year, month - 1, day);
+      startDate.setHours(0, 0, 0, 0);
+      if (startDate < today) {
+        return res.status(400).json({
+          error: "Cannot set repayment schedule for past dates",
+        });
+      }
+      const endDate = new Date(startDate);
+      endDate.setDate(
+        endDate.getDate() + installment_period_days * (installment_count - 1)
+      );
+      const baseAmount = Math.floor(total_amount / installment_count);
+      const remainder = total_amount - baseAmount * installment_count;
+      const intervalDays = Math.floor(
+        (installment_period_days * (installment_count - 1)) / installment_count
+      );
+      for (let i = installment_count - 1; i >= 0; i--) {
+        const daysFromEnd = i * intervalDays;
+        const dueDate = new Date(endDate);
+        dueDate.setDate(dueDate.getDate() - daysFromEnd);
+        const amount =
+          i === installment_count - 1 ? baseAmount + remainder : baseAmount;
+        repayments.unshift({
+          owner_user_id: loan.owner_user_id,
+          tenant_user_id: loan.tenant_user_id,
+          loan_id: loan.loan_id,
+          amount,
+          repayment_date: new Date().toISOString(),
+          note: `Installment ${installment_count - i}/${installment_count}`,
+          status: "pending",
+          confirmed_date: null,
+          processed: false,
+          due_date: dueDate.toISOString().split("T")[0],
+        });
+      }
+    } else {
+      return res.status(400).json({ error: "Invalid schedule_type" });
+    }
+
+    // Insert repayments into database
+    const { data: createdRepayments, error: insertError } = await supabase
+      .from("repayment")
+      .insert(repayments)
+      .select();
+
+    if (insertError) throw insertError;
+
+    console.log(
+      `[SECURITY] Created ${createdRepayments.length} scheduled repayments for loan ${loan_id}`
+    );
+
+    res.json({
+      success: true,
+      repayments: createdRepayments,
+      schedule_summary: {
+        total_amount,
+        installment_count: repayments.length,
+        first_due_date: repayments[0].due_date,
+        last_due_date: repayments[repayments.length - 1].due_date,
+      },
+    });
+  } catch (error) {
+    console.error("Create repayment schedule error:", error);
+    console.error("Error details:", error.message);
+    console.error("Error stack:", error.stack);
+    res.status(500).json({ error: "Failed to create repayment schedule" });
+  }
+});
+
+// GET /tenant/scheduled-repayments
+app.get("/tenant/scheduled-repayments", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`[SECURITY] User ${userId} requesting scheduled repayments`);
+
+    // Get scheduled repayments for this tenant (where due_date IS NOT NULL)
+    const { data: repayments, error: repaymentsError } = await supabase
+      .from("repayment")
+      .select(
+        `
+        repayment_id,
+        owner_user_id,
+        tenant_user_id,
+        loan_id,
+        amount,
+        repayment_date,
+        note,
+        status,
+        confirmed_date,
+        processed,
+        due_date,
+        owner:owner_user_id (
+          user_id,
+          name,
+          email
+        )
+        `
+      )
+      .eq("tenant_user_id", userId)
+      .not("due_date", "is", null)
+      .order("due_date", { ascending: true });
+
+    if (repaymentsError) throw repaymentsError;
+
+    // Get loan data separately
+    const loanIds = [
+      ...new Set(repayments.map((r) => r.loan_id).filter(Boolean)),
+    ];
+    let loanMap = {};
+
+    if (loanIds.length > 0) {
+      const { data: loans, error: loansError } = await supabase
+        .from("loan")
+        .select("loan_id, amount, created_date, note")
+        .in("loan_id", loanIds);
+
+      if (!loansError && loans) {
+        loans.forEach((l) => {
+          loanMap[l.loan_id] = {
+            amount: l.amount,
+            created_date: l.created_date,
+            note: l.note,
+          };
+        });
+      }
+    }
+
+    // Format repayments with loan and owner info
+    const repaymentsWithDetails = repayments.map((repayment) => ({
+      ...repayment,
+      loan: loanMap[repayment.loan_id] || {
+        loan_id: repayment.loan_id,
+        amount: null,
+        created_date: null,
+        note: null,
+      },
+    }));
+
+    console.log(
+      `[SECURITY] Found ${repaymentsWithDetails.length} scheduled repayments for tenant ${userId}`
+    );
+
+    res.json({ repayments: repaymentsWithDetails });
+  } catch (error) {
+    console.error("Get tenant scheduled repayments error:", error);
+    res.status(500).json({ error: "Failed to fetch scheduled repayments" });
   }
 });
 

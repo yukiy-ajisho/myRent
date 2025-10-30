@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useProperty } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
+import RepaymentScheduleModal from "@/components/RepaymentScheduleModal";
 
 interface Loan {
   loan_id: string;
@@ -43,14 +44,44 @@ interface Repayment {
   };
 }
 
+interface ScheduledRepayment {
+  repayment_id: string;
+  owner_user_id: string;
+  tenant_user_id: string;
+  loan_id: string;
+  amount: number;
+  repayment_date: string;
+  note?: string | null;
+  status: "pending" | "confirmed";
+  confirmed_date?: string | null;
+  processed: boolean;
+  due_date: string;
+  tenant?: {
+    user_id: string;
+    name: string;
+    email: string;
+    nick_name?: string | null;
+  };
+  loan: {
+    loan_id: string;
+    amount: number;
+    created_date: string;
+    note?: string | null;
+  };
+}
+
 export default function Loan() {
   const { userProperties, selectedProperty, setSelectedProperty } =
     useProperty();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [repayments, setRepayments] = useState<Repayment[]>([]);
+  const [scheduledRepayments, setScheduledRepayments] = useState<
+    ScheduledRepayment[]
+  >([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingRepayments, setIsLoadingRepayments] = useState(false);
   const [showCreateLoanModal, setShowCreateLoanModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]); // Add state for all tenants
 
   const fetchTenants = useCallback(async () => {
@@ -97,13 +128,23 @@ export default function Loan() {
     }
   }, []);
 
+  const fetchScheduledRepayments = useCallback(async () => {
+    try {
+      const data = await api.getScheduledRepayments();
+      setScheduledRepayments(data.scheduled_repayments || []);
+    } catch (error) {
+      console.error("Error loading scheduled repayments:", error);
+    }
+  }, []);
+
   // 初期データ読み込み
   useEffect(() => {
     fetchLoans();
     fetchRepayments();
+    fetchScheduledRepayments();
     fetchTenants();
     // PropertyContextが既に初期設定をしているので、ここでは何もしない
-  }, [fetchTenants, fetchLoans, fetchRepayments]);
+  }, [fetchTenants, fetchLoans, fetchRepayments, fetchScheduledRepayments]);
 
   // Filter and group tenants based on selected property
   const { groupedTenants } = useMemo(() => {
@@ -180,15 +221,36 @@ export default function Loan() {
     );
   }, [repayments, tenants, selectedProperty]);
 
+  // Filter scheduled repayments based on selected property
+  const filteredScheduledRepayments = useMemo(() => {
+    if (!selectedProperty) {
+      return scheduledRepayments;
+    }
+    const targetTenantIds = tenants
+      .filter(
+        (t) =>
+          t.property_id.toString() === selectedProperty.property_id.toString()
+      )
+      .map((t) => t.user_id);
+    return scheduledRepayments.filter((repayment) =>
+      targetTenantIds.includes(repayment.tenant_user_id)
+    );
+  }, [scheduledRepayments, tenants, selectedProperty]);
+
   // Confirm repayment handler
   const handleConfirmRepayment = async (repaymentId: string) => {
     try {
       await api.confirmRepayment(repaymentId);
       fetchRepayments();
+      fetchScheduledRepayments();
     } catch (error) {
       console.error("Error confirming repayment:", error);
       alert("Failed to confirm repayment");
     }
+  };
+
+  const handleScheduleSuccess = () => {
+    fetchScheduledRepayments();
   };
 
   // プロパティ選択変更
@@ -289,9 +351,11 @@ export default function Loan() {
         )}
       </div>
 
-      {/* Repayments Section */}
+      {/* Free Repayments Section */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mt-8">
-        <h2 className="text-xl font-bold mb-4 text-gray-800">Repayments</h2>
+        <h2 className="text-xl font-bold mb-4 text-gray-800">
+          Free Repayments
+        </h2>
         {isLoadingRepayments ? (
           <div className="text-center py-8 text-gray-500">
             Loading repayments...
@@ -389,6 +453,119 @@ export default function Loan() {
         )}
       </div>
 
+      {/* Scheduled Repayments Section */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mt-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-800">
+            Scheduled Repayments
+          </h2>
+          <button
+            onClick={() => setShowScheduleModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Create Schedule
+          </button>
+        </div>
+
+        {filteredScheduledRepayments.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No scheduled repayments found
+          </div>
+        ) : (
+          <div className="grid grid-cols-7 gap-0">
+            {/* Header */}
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+              Tenant
+            </div>
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+              Loan Created
+            </div>
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+              Due Date
+            </div>
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+              Amount
+            </div>
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+              Status
+            </div>
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+              Confirmed Date
+            </div>
+            <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
+              Action
+            </div>
+
+            {/* Data rows */}
+            {filteredScheduledRepayments.map((repayment) => (
+              <div key={repayment.repayment_id} className="contents">
+                <div className="text-left py-3">
+                  <div className="font-semibold text-gray-900">
+                    {repayment.tenant?.nick_name ||
+                      repayment.tenant?.name ||
+                      "Unknown"}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {repayment.tenant?.email || "N/A"}
+                  </div>
+                </div>
+                <div className="text-gray-600 py-3">
+                  {repayment.loan?.created_date
+                    ? new Date(repayment.loan.created_date).toLocaleDateString()
+                    : "N/A"}
+                  {repayment.loan?.note && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {repayment.loan.note}
+                    </div>
+                  )}
+                </div>
+                <div className="text-gray-600 py-3">
+                  {new Date(repayment.due_date).toLocaleDateString()}
+                </div>
+                <div className="py-3">
+                  <div className="text-lg font-bold">
+                    ${repayment.amount.toFixed(2)}
+                  </div>
+                  {repayment.loan && (
+                    <div className="text-xs text-gray-500">
+                      Loan: ${repayment.loan.amount.toFixed(2)}
+                    </div>
+                  )}
+                </div>
+                <div className="py-3">
+                  <span
+                    className={`px-2 py-1 rounded text-sm font-medium ${
+                      repayment.status === "confirmed"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-yellow-100 text-yellow-700"
+                    }`}
+                  >
+                    {repayment.status}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-600 py-3">
+                  {repayment.confirmed_date
+                    ? new Date(repayment.confirmed_date).toLocaleDateString()
+                    : "--/--/--"}
+                </div>
+                <div className="py-3">
+                  {repayment.status === "pending" && (
+                    <button
+                      onClick={() =>
+                        handleConfirmRepayment(repayment.repayment_id)
+                      }
+                      className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                    >
+                      Confirm
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Create Loan Modal */}
       {showCreateLoanModal && (
         <CreateLoanModal
@@ -398,6 +575,15 @@ export default function Loan() {
             setShowCreateLoanModal(false);
             fetchLoans();
           }}
+        />
+      )}
+
+      {/* Repayment Schedule Modal */}
+      {showScheduleModal && (
+        <RepaymentScheduleModal
+          isOpen={showScheduleModal}
+          onClose={() => setShowScheduleModal(false)}
+          onSuccess={handleScheduleSuccess}
         />
       )}
     </div>
