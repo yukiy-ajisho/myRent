@@ -4616,13 +4616,32 @@ app.get("/repayments", async (req, res) => {
 
     if (error) throw error;
 
+    // Exclude any repayments that were used as allocation sources
+    const sourceIds = (repayments || []).map((r) => r.repayment_id);
+    let allocatedSourceIds = [];
+    if (sourceIds.length > 0) {
+      const { data: allocs, error: allocErr } = await supabase
+        .from("repayment_allocation")
+        .select("source_repayment_id")
+        .in("source_repayment_id", sourceIds);
+      if (!allocErr && allocs) {
+        allocatedSourceIds = Array.from(
+          new Set(allocs.map((a) => a.source_repayment_id))
+        );
+      }
+    }
+
+    const filtered = (repayments || []).filter(
+      (r) => !allocatedSourceIds.includes(r.repayment_id)
+    );
+
     console.log(
       `[SECURITY] Found ${
         repayments?.length || 0
       } repayments for owner ${userId}`
     );
 
-    res.json({ repayments: repayments || [] });
+    res.json({ repayments: filtered });
   } catch (error) {
     console.error("Get repayments error:", error);
     res.status(500).json({ error: "Failed to fetch repayments" });
@@ -4663,13 +4682,32 @@ app.get("/tenant/repayments", async (req, res) => {
 
     if (error) throw error;
 
+    // Exclude any repayments that were used as allocation sources
+    const sourceIds = (repayments || []).map((r) => r.repayment_id);
+    let allocatedSourceIds = [];
+    if (sourceIds.length > 0) {
+      const { data: allocs, error: allocErr } = await supabase
+        .from("repayment_allocation")
+        .select("source_repayment_id")
+        .in("source_repayment_id", sourceIds);
+      if (!allocErr && allocs) {
+        allocatedSourceIds = Array.from(
+          new Set(allocs.map((a) => a.source_repayment_id))
+        );
+      }
+    }
+
+    const filtered = (repayments || []).filter(
+      (r) => !allocatedSourceIds.includes(r.repayment_id)
+    );
+
     console.log(
       `[SECURITY] Found ${
         repayments?.length || 0
       } repayments for tenant ${userId}`
     );
 
-    res.json({ repayments: repayments || [] });
+    res.json({ repayments: filtered });
   } catch (error) {
     console.error("Get tenant repayments error:", error);
     res.status(500).json({ error: "Failed to fetch tenant repayments" });
@@ -4867,9 +4905,30 @@ app.post("/tenant/pay-scheduled-repayment", async (req, res) => {
     const alreadyPaid = Number(target.amount_paid || 0);
     const targetNeeded = Math.max(0, Number(target.amount) - alreadyPaid);
     const targetAllocation = Math.min(paymentAmount, targetNeeded);
+    console.log(
+      `[ALLOC] pay-scheduled start: repayment_id=${target.repayment_id} loan_id=${target.loan_id} paymentAmount=${paymentAmount} alreadyPaid=${alreadyPaid} targetNeeded=${targetNeeded} targetAllocation=${targetAllocation}`
+    );
+    // Source for allocation trail is the repayment the tenant acted on
+    const sourceRepaymentId = target.repayment_id;
 
-    // Update target scheduled repayment directly
+    // Allocate to target scheduled repayment first
     if (targetAllocation > 0) {
+      const { error: insertTargetAllocErr } = await supabase
+        .from("repayment_allocation")
+        .insert({
+          source_repayment_id: sourceRepaymentId,
+          target_repayment_id: target.repayment_id,
+          allocated_amount: targetAllocation,
+          loan_id: target.loan_id,
+        });
+      if (insertTargetAllocErr) {
+        console.error("[ALLOC] insert target allocation error:", insertTargetAllocErr);
+      } else {
+        console.log(
+          `[ALLOC] target allocation ok: source=${sourceRepaymentId} -> target=${target.repayment_id} amount=${targetAllocation}`
+        );
+      }
+
       const newPaid = alreadyPaid + targetAllocation;
       const newStatus =
         newPaid >= Number(target.amount) ? "pending" : "partially_paid";
@@ -4884,13 +4943,14 @@ app.post("/tenant/pay-scheduled-repayment", async (req, res) => {
         .eq("repayment_id", target.repayment_id);
     }
 
-    // Handle excess payment by cascading to future scheduled repayments for the same loan
+    // Cascade to future scheduled repayments for the same loan
     let remainingAmount = paymentAmount - targetAllocation;
+    console.log(`[ALLOC] after target allocation remaining=${remainingAmount}`);
 
     if (remainingAmount > 0) {
       const { data: futureRepayments, error: futureErr } = await supabase
         .from("repayment")
-        .select("repayment_id, amount, amount_paid, status")
+        .select("repayment_id, amount, amount_paid, status, due_date")
         .eq("loan_id", target.loan_id)
         .not("due_date", "is", null)
         .neq("status", "confirmed")
@@ -4901,6 +4961,7 @@ app.post("/tenant/pay-scheduled-repayment", async (req, res) => {
 
       for (const futureRepayment of futureRepayments || []) {
         if (remainingAmount <= 0) break;
+        if (futureRepayment.repayment_id === target.repayment_id) continue;
 
         const futurePaid = Number(futureRepayment.amount_paid || 0);
         const futureNeeded = Math.max(
@@ -4910,6 +4971,25 @@ app.post("/tenant/pay-scheduled-repayment", async (req, res) => {
         const futureAllocation = Math.min(remainingAmount, futureNeeded);
 
         if (futureAllocation > 0) {
+          const { error: insertFutureAllocErr } = await supabase
+            .from("repayment_allocation")
+            .insert({
+              source_repayment_id: sourceRepaymentId,
+              target_repayment_id: futureRepayment.repayment_id,
+              allocated_amount: futureAllocation,
+              loan_id: target.loan_id,
+            });
+          if (insertFutureAllocErr) {
+            console.error(
+              "[ALLOC] insert future allocation error:",
+              insertFutureAllocErr
+            );
+          } else {
+            console.log(
+              `[ALLOC] future allocation ok: source=${sourceRepaymentId} -> target=${futureRepayment.repayment_id} amount=${futureAllocation}`
+            );
+          }
+
           const newFuturePaid = futurePaid + futureAllocation;
           const newFutureStatus =
             newFuturePaid >= Number(futureRepayment.amount)
@@ -4926,14 +5006,39 @@ app.post("/tenant/pay-scheduled-repayment", async (req, res) => {
             .eq("repayment_id", futureRepayment.repayment_id);
 
           remainingAmount -= futureAllocation;
+          console.log(
+            `[ALLOC] allocated to future ${futureRepayment.repayment_id}, remaining=${remainingAmount}`
+          );
         }
+      }
+    }
+
+    // If still leftover, record as loan-level credit (target NULL)
+    if (remainingAmount > 0) {
+      const { data: creditRows, error: creditInsertErr } = await supabase
+        .from("repayment_allocation")
+        .insert({
+          source_repayment_id: sourceRepaymentId,
+          target_repayment_id: null,
+          allocated_amount: remainingAmount,
+          loan_id: target.loan_id,
+        })
+        .select("allocation_id, allocated_amount, loan_id")
+        .single();
+      if (creditInsertErr) {
+        console.error("[ALLOC] insert loan-level credit error:", creditInsertErr);
+      } else {
+        console.log(
+          `[ALLOC] loan-level credit created: allocation_id=${creditRows.allocation_id} loan_id=${creditRows.loan_id} amount=${creditRows.allocated_amount}`
+        );
       }
     }
 
     return res.json({
       success: true,
-      amount_applied: paymentAmount - remainingAmount,
-      remaining_credit: remainingAmount,
+      source_repayment_id: sourceRepaymentId,
+      amount_applied: paymentAmount - Math.max(0, remainingAmount),
+      remaining_credit: Math.max(0, remainingAmount),
     });
   } catch (error) {
     console.error("Pay scheduled repayment error:", error);
@@ -6231,6 +6336,84 @@ app.post("/owner/create-repayment-schedule", async (req, res) => {
       `[SECURITY] Created ${createdRepayments.length} scheduled repayments for loan ${loan_id}`
     );
 
+    // Auto-consume existing loan-level credits (target_repayment_id IS NULL)
+    try {
+      const { data: creditRows, error: creditErr } = await supabase
+        .from("repayment_allocation")
+        .select(
+          "allocation_id, source_repayment_id, allocated_amount, created_at"
+        )
+        .eq("loan_id", loan_id)
+        .is("target_repayment_id", null)
+        .order("created_at", { ascending: true });
+
+      if (!creditErr && creditRows && creditRows.length > 0) {
+        // Work on a mutable copy of repayments (sorted by due date asc already in createdRepayments)
+        const byDue = [...createdRepayments].sort((a, b) =>
+          String(a.due_date).localeCompare(String(b.due_date))
+        );
+
+        for (const credit of creditRows) {
+          let remainingCredit = Number(credit.allocated_amount || 0);
+          if (remainingCredit <= 0) continue;
+
+          for (const r of byDue) {
+            if (remainingCredit <= 0) break;
+            if (r.status === "confirmed") continue;
+
+            const need = Math.max(
+              0,
+              Number(r.amount) - Number(r.amount_paid || 0)
+            );
+            if (need <= 0) continue;
+
+            const use = Math.min(need, remainingCredit);
+            if (use > 0) {
+              await supabase.from("repayment_allocation").insert({
+                source_repayment_id: credit.source_repayment_id,
+                target_repayment_id: r.repayment_id,
+                allocated_amount: use,
+                loan_id: loan_id,
+              });
+
+              const newPaid = Number(r.amount_paid || 0) + use;
+              const newStatus =
+                newPaid >= Number(r.amount) ? "pending" : "partially_paid";
+
+              await supabase
+                .from("repayment")
+                .update({
+                  amount_paid: newPaid,
+                  is_auto_paid: true,
+                  status: newStatus,
+                })
+                .eq("repayment_id", r.repayment_id);
+
+              remainingCredit -= use;
+            }
+          }
+
+          // Reduce or clear the credit row
+          const newCredit = Math.max(
+            0,
+            Number(credit.allocated_amount || 0) - remainingCredit
+          );
+          const leftover = Number(credit.allocated_amount || 0) - newCredit; // actually used
+          const finalRemaining = Math.max(
+            0,
+            Number(credit.allocated_amount || 0) - leftover
+          );
+
+          await supabase
+            .from("repayment_allocation")
+            .update({ allocated_amount: remainingCredit })
+            .eq("allocation_id", credit.allocation_id);
+        }
+      }
+    } catch (consumeErr) {
+      console.error("Auto-consume credit error (non-critical):", consumeErr);
+    }
+
     res.json({
       success: true,
       repayments: createdRepayments,
@@ -6323,17 +6506,22 @@ app.get("/tenant/scheduled-repayments", async (req, res) => {
       },
     }));
 
-    // Credit balance = overpayment on scheduled repayments
-    // (total amount_paid across all scheduled repayments) - (total amount required)
+    // Credit balance = sum of loan-level credits in repayment_allocation (target_repayment_id IS NULL)
     let creditBalance = 0;
     try {
-      let totalPaid = 0;
-      let totalRequired = 0;
-      for (const r of repayments || []) {
-        totalPaid += Number(r.amount_paid || 0);
-        totalRequired += Number(r.amount);
+      if (loanIds.length > 0) {
+        const { data: creditRows, error: creditErr } = await supabase
+          .from("repayment_allocation")
+          .select("allocated_amount")
+          .in("loan_id", loanIds)
+          .is("target_repayment_id", null);
+        if (!creditErr && creditRows) {
+          creditBalance = creditRows.reduce(
+            (sum, row) => sum + Number(row.allocated_amount || 0),
+            0
+          );
+        }
       }
-      creditBalance = Math.max(0, totalPaid - totalRequired);
     } catch (creditErr) {
       console.error("Credit balance calc error (non-critical):", creditErr);
     }
