@@ -7252,45 +7252,73 @@ app.post("/owner/create-repayment-schedule", async (req, res) => {
     let repayments = [];
 
     if (schedule_type === "month_start") {
-      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-      repayments = [
-        {
-          owner_user_id: loan.owner_user_id,
-          tenant_user_id: loan.tenant_user_id,
-          loan_id: loan.loan_id,
-          amount: total_amount,
-          repayment_date: new Date().toISOString(),
-          note: loan.note || "Repayment schedule",
-          status: "unpaid",
-          confirmed_date: null,
-          processed: false,
-          due_date: nextMonth.toISOString().split("T")[0],
-        },
-      ];
-    } else if (schedule_type === "month_end") {
-      const lastDayOfMonth = new Date(
-        today.getFullYear(),
-        today.getMonth() + 1,
-        0
-      );
-      let dueDate = lastDayOfMonth;
-      if (today.getDate() === lastDayOfMonth.getDate()) {
-        dueDate = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+      if (!specific_month || !installment_count) {
+        return res.status(400).json({
+          error:
+            "Month and installment count are required for month_start schedule",
+        });
       }
-      repayments = [
-        {
+      if (installment_count < 2 || installment_count > 24) {
+        return res.status(400).json({
+          error:
+            "Installment count must be between 2 and 24 for month_start schedule",
+        });
+      }
+      const [year, month] = specific_month.split("-").map(Number);
+      const baseAmount = Math.floor(total_amount / installment_count);
+      const remainder = total_amount - baseAmount * installment_count;
+
+      for (let i = 0; i < installment_count; i++) {
+        const dueDate = new Date(year, month - 1 + i, 1);
+        const installmentAmount =
+          i === installment_count - 1 ? baseAmount + remainder : baseAmount;
+        repayments.push({
           owner_user_id: loan.owner_user_id,
           tenant_user_id: loan.tenant_user_id,
           loan_id: loan.loan_id,
-          amount: total_amount,
+          amount: installmentAmount,
           repayment_date: new Date().toISOString(),
           note: loan.note || "Repayment schedule",
           status: "unpaid",
           confirmed_date: null,
           processed: false,
           due_date: dueDate.toISOString().split("T")[0],
-        },
-      ];
+        });
+      }
+    } else if (schedule_type === "month_end") {
+      if (!specific_month || !installment_count) {
+        return res.status(400).json({
+          error:
+            "Month and installment count are required for month_end schedule",
+        });
+      }
+      if (installment_count < 2 || installment_count > 24) {
+        return res.status(400).json({
+          error:
+            "Installment count must be between 2 and 24 for month_end schedule",
+        });
+      }
+      const [year, month] = specific_month.split("-").map(Number);
+      const baseAmount = Math.floor(total_amount / installment_count);
+      const remainder = total_amount - baseAmount * installment_count;
+
+      for (let i = 0; i < installment_count; i++) {
+        const dueDate = new Date(year, month + i, 0); // Last day of month (month+i, 0 means last day of month-1+i)
+        const installmentAmount =
+          i === installment_count - 1 ? baseAmount + remainder : baseAmount;
+        repayments.push({
+          owner_user_id: loan.owner_user_id,
+          tenant_user_id: loan.tenant_user_id,
+          loan_id: loan.loan_id,
+          amount: installmentAmount,
+          repayment_date: new Date().toISOString(),
+          note: loan.note || "Repayment schedule",
+          status: "unpaid",
+          confirmed_date: null,
+          processed: false,
+          due_date: dueDate.toISOString().split("T")[0],
+        });
+      }
     } else if (schedule_type === "specific_date") {
       if (!specific_month || specific_date === undefined) {
         return res.status(400).json({

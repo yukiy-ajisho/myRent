@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useProperty } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
-import RepaymentScheduleModal from "@/components/RepaymentScheduleModal";
 
 interface Loan {
   loan_id: string;
@@ -84,7 +83,6 @@ export default function Loan() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingRepayments, setIsLoadingRepayments] = useState(false);
   const [showCreateLoanModal, setShowCreateLoanModal] = useState(false);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]); // Add state for all tenants
 
   const fetchTenants = useCallback(async () => {
@@ -252,10 +250,6 @@ export default function Loan() {
     }
   };
 
-  const handleScheduleSuccess = () => {
-    fetchScheduledRepayments();
-  };
-
   // プロパティ選択変更
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const propertyId = e.target.value;
@@ -354,120 +348,12 @@ export default function Loan() {
         )}
       </div>
 
-      {/* Free Repayments Section */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mt-8">
-        <h2 className="text-xl font-bold mb-4 text-gray-800">
-          Free Repayments
-        </h2>
-        {isLoadingRepayments ? (
-          <div className="text-center py-8 text-gray-500">
-            Loading repayments...
-          </div>
-        ) : filteredRepayments.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No repayments found
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Tenant
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Amount
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Repayment Date
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Confirmed Date
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Note
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Status
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRepayments.map((repayment) => (
-                  <tr
-                    key={repayment.repayment_id}
-                    className="border-b border-gray-100 hover:bg-gray-50"
-                  >
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-gray-900">
-                        {repayment.tenant?.name || "Unknown"}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {repayment.tenant?.email || "N/A"}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-gray-900">
-                      ${repayment.amount.toFixed(2)}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {new Date(repayment.repayment_date).toLocaleDateString()}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {repayment.confirmed_date
-                        ? new Date(
-                            repayment.confirmed_date
-                          ).toLocaleDateString()
-                        : "--/--/--"}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {repayment.note || "—"}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`px-2 py-1 rounded text-sm font-medium ${
-                          repayment.status === "confirmed"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-yellow-100 text-yellow-700"
-                        }`}
-                      >
-                        {repayment.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {repayment.status === "pending" && (
-                        <button
-                          onClick={() =>
-                            handleConfirmRepayment(repayment.repayment_id)
-                          }
-                          className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
-                        >
-                          Confirm
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
       {/* Scheduled Repayments Section */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mt-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-gray-800">
             Scheduled Repayments
           </h2>
-          <button
-            onClick={() => setShowScheduleModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Create Schedule
-          </button>
         </div>
 
         {filteredScheduledRepayments.length === 0 ? (
@@ -546,7 +432,7 @@ export default function Loan() {
                     const isConfirmed = repayment.status === "confirmed";
                     const isPending = repayment.status === "pending";
                     const isPartial =
-                      repayment.status === "partially_paid" ||
+                      (repayment.status as string) === "partially_paid" ||
                       (isPending && paid > 0 && paid < total);
 
                     const badgeClass = isConfirmed
@@ -624,16 +510,8 @@ export default function Loan() {
           onCreateSuccess={() => {
             setShowCreateLoanModal(false);
             fetchLoans();
+            fetchScheduledRepayments();
           }}
-        />
-      )}
-
-      {/* Repayment Schedule Modal */}
-      {showScheduleModal && (
-        <RepaymentScheduleModal
-          isOpen={showScheduleModal}
-          onClose={() => setShowScheduleModal(false)}
-          onSuccess={handleScheduleSuccess}
         />
       )}
     </div>
@@ -661,37 +539,401 @@ function CreateLoanModal({
   const [amount, setAmount] = useState<string>("");
   const [note, setNote] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
+  const [scheduleType, setScheduleType] = useState<
+    "month_start" | "month_end" | "specific_date" | "installment" | ""
+  >("");
+  const [monthStartMonth, setMonthStartMonth] = useState<string>("");
+  const [monthStartCount, setMonthStartCount] = useState<number>(2);
+  const [monthStartCountInput, setMonthStartCountInput] = useState<string>("2");
+  const [monthEndMonth, setMonthEndMonth] = useState<string>("");
+  const [monthEndCount, setMonthEndCount] = useState<number>(2);
+  const [monthEndCountInput, setMonthEndCountInput] = useState<string>("2");
+  const [specificDate, setSpecificDate] = useState<string>("");
+  const [installmentCount, setInstallmentCount] = useState<number>(2);
+  const [installmentCountInput, setInstallmentCountInput] =
+    useState<string>("2");
+  const [installmentStartDate, setInstallmentStartDate] = useState<string>("");
+  const [installmentPeriodDays, setInstallmentPeriodDays] =
+    useState<number>(30);
+  const [installmentPeriodDaysInput, setInstallmentPeriodDaysInput] =
+    useState<string>("30");
+  const [preview, setPreview] = useState<
+    Array<{
+      installment_number: number;
+      due_date: string;
+      amount: number;
+    }>
+  >([]);
+  const [error, setError] = useState<string>("");
+
+  // Initialize dates when modal opens (runs every time component mounts)
+  useEffect(() => {
+    const today = new Date();
+    const todayString = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const nextMonthString = `${nextMonth.getFullYear()}-${String(
+      nextMonth.getMonth() + 1
+    ).padStart(2, "0")}-${String(nextMonth.getDate()).padStart(2, "0")}`;
+
+    // Month Start: always next month
+    const nextMonthStringForMonth = `${nextMonth.getFullYear()}-${String(
+      nextMonth.getMonth() + 1
+    ).padStart(2, "0")}`;
+
+    // Month End: current month if today is not the last day, otherwise next month
+    const lastDayOfCurrentMonth = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      0
+    ).getDate();
+    const isLastDayOfMonth = today.getDate() === lastDayOfCurrentMonth;
+    const monthEndDefaultMonth = isLastDayOfMonth ? nextMonth : today;
+    const monthEndMonthString = `${monthEndDefaultMonth.getFullYear()}-${String(
+      monthEndDefaultMonth.getMonth() + 1
+    ).padStart(2, "0")}`;
+
+    setSpecificDate(nextMonthString);
+    setInstallmentStartDate(todayString);
+    setInstallmentCount(2);
+    setInstallmentCountInput("2");
+    setMonthStartMonth(nextMonthStringForMonth); // Next month for Month Start
+    setMonthStartCount(2);
+    setMonthStartCountInput("2");
+    setMonthEndMonth(monthEndMonthString); // Current month if not last day, else next month
+    setMonthEndCount(2);
+    setMonthEndCountInput("2");
+    // Reset other states when modal opens
+    setSelectedTenantId(null);
+    setAmount("");
+    setNote("");
+    setScheduleType("");
+    setError("");
+    setPreview([]);
+  }, []);
+
+  // Helper function to format date as YYYY-MM-DD
+  const formatDate = (date: Date): string => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+
+  // Calculate preview based on amount input
+  const calculatePreview = useCallback(() => {
+    if (!amount || parseFloat(amount) <= 0 || !scheduleType) {
+      setPreview([]);
+      return;
+    }
+
+    const totalAmount = parseFloat(amount);
+    let previews: Array<{
+      installment_number: number;
+      due_date: string;
+      amount: number;
+    }> = [];
+
+    if (scheduleType === "month_start") {
+      if (!monthStartMonth) {
+        setPreview([]);
+        return;
+      }
+      const [year, month] = monthStartMonth.split("-").map(Number);
+      const baseAmount = Math.floor(totalAmount / monthStartCount);
+      const remainder = totalAmount - baseAmount * monthStartCount;
+
+      for (let i = 0; i < monthStartCount; i++) {
+        const dueDate = new Date(year, month - 1 + i, 1);
+        const installmentAmount =
+          i === monthStartCount - 1 ? baseAmount + remainder : baseAmount;
+        previews.push({
+          installment_number: i + 1,
+          due_date: formatDate(dueDate),
+          amount: installmentAmount,
+        });
+      }
+    } else if (scheduleType === "month_end") {
+      if (!monthEndMonth) {
+        setPreview([]);
+        return;
+      }
+      const [year, month] = monthEndMonth.split("-").map(Number);
+      const baseAmount = Math.floor(totalAmount / monthEndCount);
+      const remainder = totalAmount - baseAmount * monthEndCount;
+
+      for (let i = 0; i < monthEndCount; i++) {
+        const dueDate = new Date(year, month + i, 0); // Last day of month
+        const installmentAmount =
+          i === monthEndCount - 1 ? baseAmount + remainder : baseAmount;
+        previews.push({
+          installment_number: i + 1,
+          due_date: formatDate(dueDate),
+          amount: installmentAmount,
+        });
+      }
+    } else if (scheduleType === "specific_date") {
+      if (!specificDate) {
+        setPreview([]);
+        return;
+      }
+      const [year, month, day] = specificDate.split("-").map(Number);
+      const dueDate = new Date(year, month - 1, day);
+      previews = [
+        {
+          installment_number: 1,
+          due_date: formatDate(dueDate),
+          amount: totalAmount,
+        },
+      ];
+    } else if (scheduleType === "installment") {
+      if (!installmentStartDate) {
+        setPreview([]);
+        return;
+      }
+      const [year, month, day] = installmentStartDate.split("-").map(Number);
+      const start = new Date(year, month - 1, day);
+      const totalDays = Math.max(1, installmentPeriodDays);
+      const endDate = new Date(start);
+      endDate.setDate(endDate.getDate() + (totalDays - 1));
+
+      const baseAmount = Math.floor(totalAmount / installmentCount);
+      const remainder = totalAmount - baseAmount * installmentCount;
+
+      // 新しい順方向ロジック: 期間内を均等に分割
+      const interval = totalDays / installmentCount;
+
+      for (let i = 1; i <= installmentCount; i++) {
+        let dueDate: Date;
+        if (i === installmentCount) {
+          // 最後の支払いは必ずendDate
+          dueDate = new Date(endDate);
+        } else {
+          // Installment i: start + (i * interval) - 1日
+          const daysOffset = i * interval - 1;
+          dueDate = new Date(start);
+          dueDate.setDate(dueDate.getDate() + Math.round(daysOffset));
+        }
+
+        const installmentAmount =
+          i === installmentCount ? baseAmount + remainder : baseAmount;
+        previews.push({
+          installment_number: i,
+          due_date: formatDate(dueDate),
+          amount: installmentAmount,
+        });
+      }
+    }
+
+    setPreview(previews);
+  }, [
+    amount,
+    scheduleType,
+    monthStartMonth,
+    monthStartCount,
+    monthEndMonth,
+    monthEndCount,
+    specificDate,
+    installmentCount,
+    installmentStartDate,
+    installmentPeriodDays,
+  ]);
+
+  // Update preview when inputs change
+  useEffect(() => {
+    if (amount && scheduleType) {
+      calculatePreview();
+    } else {
+      setPreview([]);
+    }
+  }, [amount, scheduleType, calculatePreview]);
+
+  const validateSchedule = (): string | null => {
+    if (!scheduleType) return null;
+
+    if (scheduleType === "month_start") {
+      if (!monthStartMonth) {
+        return "Please select a start month";
+      }
+      if (monthStartCount < 2) {
+        return "Installment count must be at least 2";
+      }
+      if (monthStartCount > 24) {
+        return "Installment count cannot exceed 24 (2 years)";
+      }
+    }
+
+    if (scheduleType === "month_end") {
+      if (!monthEndMonth) {
+        return "Please select a start month";
+      }
+      if (monthEndCount < 2) {
+        return "Installment count must be at least 2";
+      }
+      if (monthEndCount > 24) {
+        return "Installment count cannot exceed 24 (2 years)";
+      }
+    }
+
+    if (scheduleType === "specific_date") {
+      if (!specificDate) {
+        return "Please select a date";
+      }
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const [year, month, day] = specificDate.split("-").map(Number);
+      const selectedDate = new Date(year, month - 1, day);
+      selectedDate.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        return "Cannot select a date in the past";
+      }
+    }
+
+    if (scheduleType === "installment") {
+      if (!installmentStartDate) {
+        return "Please select a start date";
+      }
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const [year, month, day] = installmentStartDate.split("-").map(Number);
+      const selectedDate = new Date(year, month - 1, day);
+      selectedDate.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        return "Cannot select a date in the past";
+      }
+      if (installmentCount < 2) {
+        return "Installment count must be at least 2";
+      }
+      if (installmentCount > installmentPeriodDays) {
+        return `Installment count cannot exceed payment period (${installmentPeriodDays} days)`;
+      }
+      if (installmentPeriodDays < 1 || installmentPeriodDays > 365) {
+        return "Payment period must be between 1 and 365 days";
+      }
+    }
+
+    return null;
+  };
 
   const handleCreateLoan = async () => {
     if (!selectedTenantId || !amount) {
-      alert("Please select a tenant and enter an amount.");
+      setError("Please select a tenant and enter an amount.");
+      return;
+    }
+
+    if (!scheduleType) {
+      setError("Please select a repayment schedule plan.");
+      return;
+    }
+
+    const scheduleError = validateSchedule();
+    if (scheduleError) {
+      setError(scheduleError);
       return;
     }
 
     setIsCreating(true);
+    setError("");
+
     try {
-      await api.createLoan({
+      // Create loan
+      const loanResponse = await api.createLoan({
         tenant_user_id: selectedTenantId,
         amount: parseFloat(amount),
         note,
       });
+
+      const loanId = loanResponse.loan?.loan_id;
+
+      if (!loanId) {
+        throw new Error("Failed to get loan ID after creation");
+      }
+
+      // Create schedule if enabled
+      if (scheduleType && loanId) {
+        try {
+          await api.createRepaymentSchedule({
+            loan_id: loanId,
+            schedule_type: scheduleType,
+            specific_month:
+              scheduleType === "specific_date"
+                ? specificDate.substring(0, 7)
+                : scheduleType === "month_start"
+                ? monthStartMonth
+                : scheduleType === "month_end"
+                ? monthEndMonth
+                : undefined,
+            specific_date:
+              scheduleType === "specific_date"
+                ? parseInt(specificDate.substring(8, 10))
+                : undefined,
+            installment_count:
+              scheduleType === "installment"
+                ? installmentCount
+                : scheduleType === "month_start"
+                ? monthStartCount
+                : scheduleType === "month_end"
+                ? monthEndCount
+                : undefined,
+            installment_start_date:
+              scheduleType === "installment" ? installmentStartDate : undefined,
+            installment_period_days:
+              scheduleType === "installment"
+                ? installmentPeriodDays
+                : undefined,
+          });
+        } catch (scheduleError) {
+          console.error("Error creating schedule:", scheduleError);
+          alert(
+            "Loan created successfully, but failed to create repayment schedule. You can create it later from the Scheduled Repayments section."
+          );
+        }
+      }
+
       onCreateSuccess();
     } catch (error) {
       console.error("Error creating loan:", error);
-      alert("Failed to create loan.");
+      setError("Failed to create loan.");
     } finally {
       setIsCreating(false);
     }
   };
 
+  const todayString = new Date().toISOString().split("T")[0];
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-        <h2 className="text-xl font-semibold mb-4">Create Loan</h2>
-        <div className="mb-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Create Loan</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-2xl"
+              disabled={isCreating}
+            >
+              ✕
+            </button>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-6">
+            {/* Loan Information Section */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                Loan Information
+              </h3>
+              <div className="space-y-4">
+                <div>
           <label
             htmlFor="tenant"
-            className="block text-gray-700 text-sm font-bold mb-2"
+                    className="block text-sm font-medium text-gray-700 mb-1"
           >
             Tenant:
           </label>
@@ -699,7 +941,8 @@ function CreateLoanModal({
             id="tenant"
             value={selectedTenantId || ""}
             onChange={(e) => setSelectedTenantId(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isCreating}
           >
             <option value="">Select a tenant</option>
             {groupedTenants.map((tenant) => (
@@ -709,10 +952,10 @@ function CreateLoanModal({
             ))}
           </select>
         </div>
-        <div className="mb-4">
+                <div>
           <label
             htmlFor="amount"
-            className="block text-gray-700 text-sm font-bold mb-2"
+                    className="block text-sm font-medium text-gray-700 mb-1"
           >
             Amount:
           </label>
@@ -721,15 +964,17 @@ function CreateLoanModal({
             id="amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Enter loan amount"
             min="0"
+                    step="0.01"
+                    disabled={isCreating}
           />
         </div>
-        <div className="mb-6">
+                <div>
           <label
             htmlFor="note"
-            className="block text-gray-700 text-sm font-bold mb-2"
+                    className="block text-sm font-medium text-gray-700 mb-1"
           >
             Note (Optional):
           </label>
@@ -737,25 +982,440 @@ function CreateLoanModal({
             id="note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-24"
+                    className="w-full px-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-24"
             placeholder="Add a note for the loan"
+                    disabled={isCreating}
           ></textarea>
         </div>
-        <div className="flex justify-end gap-2">
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-gray-200"></div>
+
+            {/* Repayment Schedule Section */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                Repayment Schedule
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Repayment Plan:
+                  </label>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="month_start"
+                          checked={scheduleType === "month_start"}
+                          onChange={(e) =>
+                            setScheduleType(
+                              e.target.value as typeof scheduleType
+                            )
+                          }
+                          className="mr-2"
+                          disabled={isCreating}
+                        />
+                        <span>Month Start</span>
+                      </label>
+                      {scheduleType === "month_start" && (
+                        <div className="ml-6 mt-2 space-y-2">
+                          <div>
+                            <label className="text-sm text-gray-600">
+                              Start Month:
+                            </label>
+                            <input
+                              type="month"
+                              value={monthStartMonth}
+                              onChange={(e) =>
+                                setMonthStartMonth(e.target.value)
+                              }
+                              min={(() => {
+                                // Month Start: always next month
+                                const today = new Date();
+                                const nextMonth = new Date(
+                                  today.getFullYear(),
+                                  today.getMonth() + 1,
+                                  1
+                                );
+                                return `${nextMonth.getFullYear()}-${String(
+                                  nextMonth.getMonth() + 1
+                                ).padStart(2, "0")}`;
+                              })()}
+                              className="ml-2 px-2 py-1 border border-gray-300 rounded"
+                              disabled={isCreating}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-sm text-gray-600">
+                              Installments:
+                            </label>
+                            <input
+                              type="number"
+                              value={monthStartCountInput}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setMonthStartCountInput(v);
+                                const n = parseInt(v, 10);
+                                if (!Number.isNaN(n)) {
+                                  const clamped = Math.min(24, Math.max(2, n));
+                                  setMonthStartCount(clamped);
+                                }
+                              }}
+                              onBlur={() => {
+                                const n = parseInt(monthStartCountInput, 10);
+                                if (Number.isNaN(n)) {
+                                  setMonthStartCountInput(
+                                    String(monthStartCount)
+                                  );
+                                } else {
+                                  const clamped = Math.min(24, Math.max(2, n));
+                                  setMonthStartCount(clamped);
+                                  setMonthStartCountInput(String(clamped));
+                                }
+                              }}
+                              min={2}
+                              max={24}
+                              className="ml-2 px-2 py-1 border border-gray-300 rounded w-24"
+                              disabled={isCreating}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Number of installments (2-24)
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="month_end"
+                          checked={scheduleType === "month_end"}
+                          onChange={(e) =>
+                            setScheduleType(
+                              e.target.value as typeof scheduleType
+                            )
+                          }
+                          className="mr-2"
+                          disabled={isCreating}
+                        />
+                        <span>Month End</span>
+                      </label>
+                      {scheduleType === "month_end" && (
+                        <div className="ml-6 mt-2 space-y-2">
+                          <div>
+                            <label className="text-sm text-gray-600">
+                              Start Month:
+                            </label>
+                            <input
+                              type="month"
+                              value={monthEndMonth}
+                              onChange={(e) => setMonthEndMonth(e.target.value)}
+                              min={(() => {
+                                // Month End: current month if today is not the last day, otherwise next month
+                                const today = new Date();
+                                const lastDayOfCurrentMonth = new Date(
+                                  today.getFullYear(),
+                                  today.getMonth() + 1,
+                                  0
+                                ).getDate();
+                                const isLastDayOfMonth =
+                                  today.getDate() === lastDayOfCurrentMonth;
+                                const minMonth = isLastDayOfMonth
+                                  ? new Date(
+                                      today.getFullYear(),
+                                      today.getMonth() + 1,
+                                      1
+                                    )
+                                  : today;
+                                return `${minMonth.getFullYear()}-${String(
+                                  minMonth.getMonth() + 1
+                                ).padStart(2, "0")}`;
+                              })()}
+                              className="ml-2 px-2 py-1 border border-gray-300 rounded"
+                              disabled={isCreating}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-sm text-gray-600">
+                              Installments:
+                            </label>
+                            <input
+                              type="number"
+                              value={monthEndCountInput}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setMonthEndCountInput(v);
+                                const n = parseInt(v, 10);
+                                if (!Number.isNaN(n)) {
+                                  const clamped = Math.min(24, Math.max(2, n));
+                                  setMonthEndCount(clamped);
+                                }
+                              }}
+                              onBlur={() => {
+                                const n = parseInt(monthEndCountInput, 10);
+                                if (Number.isNaN(n)) {
+                                  setMonthEndCountInput(String(monthEndCount));
+                                } else {
+                                  const clamped = Math.min(24, Math.max(2, n));
+                                  setMonthEndCount(clamped);
+                                  setMonthEndCountInput(String(clamped));
+                                }
+                              }}
+                              min={2}
+                              max={24}
+                              className="ml-2 px-2 py-1 border border-gray-300 rounded w-24"
+                              disabled={isCreating}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Number of installments (2-24)
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="specific_date"
+                          checked={scheduleType === "specific_date"}
+                          onChange={(e) =>
+                            setScheduleType(
+                              e.target.value as typeof scheduleType
+                            )
+                          }
+                          className="mr-2"
+                          disabled={isCreating}
+                        />
+                        <span>Specific Date - Lump Sum</span>
+                      </label>
+                      {scheduleType === "specific_date" && (
+                        <div className="ml-6 mt-2 space-y-2">
+                          <div>
+                            <label className="text-sm text-gray-600">
+                              Select Date:
+                            </label>
+                            <input
+                              type="date"
+                              value={specificDate}
+                              onChange={(e) => setSpecificDate(e.target.value)}
+                              min={todayString}
+                              className="ml-2 px-2 py-1 border border-gray-300 rounded"
+                              disabled={isCreating}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="installment"
+                          checked={scheduleType === "installment"}
+                          onChange={(e) =>
+                            setScheduleType(
+                              e.target.value as typeof scheduleType
+                            )
+                          }
+                          className="mr-2"
+                          disabled={isCreating}
+                        />
+                        <span>Installment</span>
+                      </label>
+                      {scheduleType === "installment" && (
+                        <div className="ml-6 mt-2 space-y-2">
+                          <div>
+                            <label className="text-sm text-gray-600">
+                              Select Start Date:
+                            </label>
+                            <input
+                              type="date"
+                              value={installmentStartDate}
+                              onChange={(e) =>
+                                setInstallmentStartDate(e.target.value)
+                              }
+                              min={todayString}
+                              className="ml-2 px-2 py-1 border border-gray-300 rounded"
+                              disabled={isCreating}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-sm text-gray-600">
+                              Installments:
+                            </label>
+                            <input
+                              type="number"
+                              value={installmentCountInput}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setInstallmentCountInput(v);
+                                const n = parseInt(v, 10);
+                                if (!Number.isNaN(n)) {
+                                  const clamped = Math.min(
+                                    installmentPeriodDays,
+                                    Math.max(2, n)
+                                  );
+                                  setInstallmentCount(clamped);
+                                }
+                              }}
+                              onBlur={() => {
+                                const n = parseInt(installmentCountInput, 10);
+                                if (Number.isNaN(n)) {
+                                  setInstallmentCountInput(
+                                    String(installmentCount)
+                                  );
+                                } else {
+                                  const clamped = Math.min(
+                                    installmentPeriodDays,
+                                    Math.max(2, n)
+                                  );
+                                  setInstallmentCount(clamped);
+                                  setInstallmentCountInput(String(clamped));
+                                }
+                              }}
+                              min={2}
+                              max={installmentPeriodDays}
+                              className="ml-2 px-2 py-1 border border-gray-300 rounded w-24"
+                              disabled={isCreating}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Number of installments (2-{installmentPeriodDays})
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm text-gray-600">
+                              Payment Period (Days):
+                            </label>
+                            <input
+                              type="number"
+                              value={installmentPeriodDaysInput}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setInstallmentPeriodDaysInput(v);
+                                const n = parseInt(v, 10);
+                                if (!Number.isNaN(n)) {
+                                  const clamped = Math.min(365, Math.max(1, n));
+                                  setInstallmentPeriodDays(clamped);
+                                  // Payment Periodが変更されたら、installmentCountを調整
+                                  if (installmentCount > clamped) {
+                                    setInstallmentCount(clamped);
+                                    setInstallmentCountInput(String(clamped));
+                                  }
+                                }
+                              }}
+                              onBlur={() => {
+                                const n = parseInt(
+                                  installmentPeriodDaysInput,
+                                  10
+                                );
+                                if (Number.isNaN(n)) {
+                                  setInstallmentPeriodDaysInput(
+                                    String(installmentPeriodDays)
+                                  );
+                                } else {
+                                  const clamped = Math.min(365, Math.max(1, n));
+                                  setInstallmentPeriodDays(clamped);
+                                  setInstallmentPeriodDaysInput(
+                                    String(clamped)
+                                  );
+                                  // Payment Periodが変更されたら、installmentCountを調整
+                                  if (installmentCount > clamped) {
+                                    setInstallmentCount(clamped);
+                                    setInstallmentCountInput(String(clamped));
+                                  }
+                                }
+                              }}
+                              min={1}
+                              max={365}
+                              className="ml-2 px-2 py-1 border border-gray-300 rounded"
+                              disabled={isCreating}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Number of days from start date to final payment
+                              (1-365)
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                {scheduleType && preview.length > 0 && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-md border border-gray-200">
+                    <h3 className="font-semibold mb-2">Preview:</h3>
+                    <div className="space-y-1 text-sm max-h-[200px] overflow-y-auto pr-2">
+                      {preview.map((p) => {
+                        const [year, month, day] = p.due_date.split("-");
+                        const displayDate = `${month}/${day}/${year}`;
+                        return (
+                          <div
+                            key={p.installment_number}
+                            className="flex justify-between"
+                          >
+                            <span>
+                              {preview.length > 1
+                                ? `Installment ${p.installment_number}: `
+                                : ""}
+                              {displayDate}
+                            </span>
+                            <span className="font-semibold">
+                              ${p.amount.toLocaleString()}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="pt-2 mt-2 border-t border-gray-300 flex justify-between font-bold text-sm">
+                      <span>Total:</span>
+                      <span>
+                        $
+                        {preview
+                          .reduce((sum, p) => sum + p.amount, 0)
+                          .toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="mt-6 flex justify-end space-x-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
+              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
             disabled={isCreating}
           >
             Cancel
           </button>
           <button
             onClick={handleCreateLoan}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            disabled={isCreating || !selectedTenantId || !amount}
+              disabled={
+                isCreating ||
+                !selectedTenantId ||
+                !amount ||
+                !scheduleType ||
+                (scheduleType === "installment" && !installmentStartDate) ||
+                (scheduleType === "specific_date" && !specificDate) ||
+                (scheduleType === "month_start" && !monthStartMonth) ||
+                (scheduleType === "month_end" && !monthEndMonth)
+              }
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             {isCreating ? "Creating..." : "Create Loan"}
           </button>
+          </div>
         </div>
       </div>
     </div>
