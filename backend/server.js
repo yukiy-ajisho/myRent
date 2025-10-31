@@ -5342,207 +5342,8 @@ app.get("/notifications", async (req, res) => {
 
     console.log(`[SECURITY] User ${userId} requesting notifications`);
 
-    // Check if user is a tenant and create payment reminder notifications if needed
-    const { data: userData, error: userError } = await supabase
-      .from("app_user")
-      .select("user_type")
-      .eq("user_id", userId)
-      .single();
-
-    if (!userError && userData && userData.user_type === "tenant") {
-      // Get tenant's properties
-      const { data: userProperties, error: propsError } = await supabase
-        .from("user_property")
-        .select("property_id")
-        .eq("user_id", userId);
-
-      if (!propsError && userProperties && userProperties.length > 0) {
-        const propertyIds = userProperties.map((up) => up.property_id);
-
-        // Get billing settings for these properties
-        const { data: billingSettings, error: settingsError } = await supabase
-          .from("property_billing_settings")
-          .select("*")
-          .in("property_id", propertyIds);
-
-        if (!settingsError && billingSettings) {
-          const today = new Date();
-          const currentYear = today.getFullYear();
-          const currentMonth = today.getMonth();
-          const currentDay = today.getDate();
-
-          // Check each property's settings and create notifications if needed
-          for (const setting of billingSettings) {
-            try {
-              console.log(
-                `[BILLING_NOTIFICATION] Checking property ${setting.property_id}: payment_day=${setting.payment_day}, lead_days=${setting.notification_lead_days}`
-              );
-              console.log(
-                `[BILLING_NOTIFICATION] Today: ${currentYear}-${
-                  currentMonth + 1
-                }-${currentDay}`
-              );
-
-              const {
-                notificationDay,
-                notificationMonth,
-                notificationYear,
-                paymentDate,
-              } = calculateBillingDates(
-                setting.payment_day,
-                setting.notification_lead_days,
-                currentYear,
-                currentMonth
-              );
-
-              console.log(
-                `[BILLING_NOTIFICATION] Calculated notification date: ${notificationYear}-${
-                  notificationMonth + 1
-                }-${notificationDay}`
-              );
-              console.log(
-                `[BILLING_NOTIFICATION] Payment date: ${paymentDate.toLocaleDateString()}`
-              );
-
-              // Check if notification should be created
-              // Create notification if:
-              // 1. Today matches the notification day, OR
-              // 2. Today is after notification day but before payment day (catch up for missed access)
-              const todayDate = new Date(currentYear, currentMonth, currentDay);
-              const notificationDateObj = new Date(
-                notificationYear,
-                notificationMonth,
-                notificationDay
-              );
-              const paymentDateObj = paymentDate;
-
-              const isNotificationDay =
-                currentDay === notificationDay &&
-                currentMonth === notificationMonth &&
-                currentYear === notificationYear;
-
-              const isAfterNotificationDay = todayDate >= notificationDateObj;
-              const isBeforePaymentDay = todayDate < paymentDateObj;
-
-              if (isNotificationDay) {
-                console.log(
-                  `[BILLING_NOTIFICATION] ✓ Today matches notification day for property ${setting.property_id}`
-                );
-              } else if (isAfterNotificationDay && isBeforePaymentDay) {
-                console.log(
-                  `[BILLING_NOTIFICATION] ✓ Today is after notification day but before payment day - creating missed notification for property ${setting.property_id}`
-                );
-              }
-
-              if (
-                isNotificationDay ||
-                (isAfterNotificationDay && isBeforePaymentDay)
-              ) {
-                // Get property name
-                const { data: property, error: propertyError } = await supabase
-                  .from("property")
-                  .select("name")
-                  .eq("property_id", setting.property_id)
-                  .single();
-
-                if (propertyError || !property) {
-                  console.log(
-                    `[BILLING_NOTIFICATION] Property ${setting.property_id} not found or error:`,
-                    propertyError
-                  );
-                  continue;
-                }
-
-                // Check if notification already exists for this month/property/tenant
-                const monthStart = new Date(currentYear, currentMonth, 1)
-                  .toISOString()
-                  .split("T")[0];
-
-                console.log(
-                  `[BILLING_NOTIFICATION] Checking for existing notifications since ${monthStart}`
-                );
-
-                const { data: existingNotifications, error: checkError } =
-                  await supabase
-                    .from("notification")
-                    .select("notification_id")
-                    .eq("user_id", userId)
-                    .eq("type", "payment_reminder")
-                    .gte("created_at", monthStart)
-                    .limit(1);
-
-                if (checkError) {
-                  console.error(
-                    `[BILLING_NOTIFICATION] Error checking existing notifications:`,
-                    checkError
-                  );
-                  continue;
-                }
-
-                console.log(
-                  `[BILLING_NOTIFICATION] Existing notifications found: ${
-                    existingNotifications?.length || 0
-                  }`
-                );
-
-                // If notification doesn't exist, create it
-                if (
-                  !existingNotifications ||
-                  existingNotifications.length === 0
-                ) {
-                  console.log(
-                    `[BILLING_NOTIFICATION] Creating new notification for tenant ${userId}`
-                  );
-                  const paymentDateStr = paymentDate.toLocaleDateString(
-                    "en-US",
-                    {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    }
-                  );
-
-                  await createNotification({
-                    userId: userId,
-                    type: "payment_reminder",
-                    priority: "info",
-                    title: "Payment Reminder",
-                    message: `Your bill is due on ${paymentDateStr} for ${property.name}`,
-                    actionUrl: "/tenant/payment",
-                    actionLabel: "View Payment",
-                    expiresAt: null,
-                  });
-
-                  console.log(
-                    `[BILLING_NOTIFICATION] Created payment reminder notification for tenant ${userId} - Property: ${property.name}, Due: ${paymentDateStr}`
-                  );
-                } else {
-                  console.log(
-                    `[BILLING_NOTIFICATION] Notification already exists for tenant ${userId}, skipping creation`
-                  );
-                }
-              } else {
-                console.log(
-                  `[BILLING_NOTIFICATION] ✗ Today does NOT match notification day for property ${setting.property_id}`
-                );
-                console.log(
-                  `[BILLING_NOTIFICATION] Today: ${currentYear}-${
-                    currentMonth + 1
-                  }-${currentDay}, Notification: ${notificationYear}-${
-                    notificationMonth + 1
-                  }-${notificationDay}`
-                );
-              }
-            } catch (error) {
-              console.error(
-                `[BILLING_NOTIFICATION] Error processing property ${setting.property_id}:`,
-                error
-              );
-            }
-          }
-        }
-      }
-    }
+    // Notification creation is now handled by background job (runs daily at scheduled time)
+    // No need to check/create here when tenant accesses notifications
 
     // Get all notifications for the user
     const { data: notifications, error } = await supabase
@@ -5566,6 +5367,291 @@ app.get("/notifications", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch notifications" });
   }
 });
+
+// PUT /notifications/:notificationId/read - Mark notification as read
+app.put("/notifications/:notificationId/read", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { notificationId } = req.params;
+
+    console.log(
+      `[SECURITY] User ${userId} marking notification ${notificationId} as read`
+    );
+
+    const { data: updatedNotification, error } = await supabase
+      .from("notification")
+      .update({ is_read: true })
+      .eq("notification_id", notificationId)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (!updatedNotification) {
+      return res
+        .status(404)
+        .json({ error: "Notification not found or unauthorized" });
+    }
+
+    res.json({ notification: updatedNotification });
+  } catch (error) {
+    console.error("Mark notification as read error:", error);
+    res.status(500).json({ error: "Failed to mark notification as read" });
+  }
+});
+
+// DELETE /notifications/:notificationId - Delete notification
+app.delete("/notifications/:notificationId", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { notificationId } = req.params;
+
+    console.log(
+      `[SECURITY] User ${userId} deleting notification ${notificationId}`
+    );
+
+    const { error } = await supabase
+      .from("notification")
+      .delete()
+      .eq("notification_id", notificationId)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Delete notification error:", error);
+    res.status(500).json({ error: "Failed to delete notification" });
+  }
+});
+
+// Helper function to create notification
+async function createNotification({
+  userId,
+  type,
+  priority,
+  title,
+  message,
+  actionUrl,
+  actionLabel,
+  expiresAt = null,
+}) {
+  try {
+    const { data: notification, error } = await supabase
+      .from("notification")
+      .insert({
+        user_id: userId,
+        type: type,
+        priority: priority,
+        title: title,
+        message: message,
+        action_url: actionUrl,
+        action_label: actionLabel,
+        expires_at: expiresAt,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Failed to create notification:", error);
+      return null;
+    }
+
+    return notification;
+  } catch (error) {
+    console.error("Create notification error:", error);
+    return null;
+  }
+}
+
+// ============================================
+// PROPERTY BILLING SETTINGS ENDPOINTS
+// ============================================
+
+// GET /owner/property-billing-settings?property_id=:id - Get one property's settings
+app.get("/owner/property-billing-settings", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { property_id } = req.query;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting property billing settings for property ${property_id}`
+    );
+
+    // If property_id provided, return single property's settings
+    if (property_id) {
+      // Verify owner has access to this property
+      const { data: userProperty, error: accessError } = await supabase
+        .from("user_property")
+        .select("property_id")
+        .eq("user_id", userId)
+        .eq("property_id", property_id)
+        .single();
+
+      if (accessError || !userProperty) {
+        console.log(
+          `[SECURITY] Access denied for user ${userId} to property ${property_id}`
+        );
+        return res
+          .status(403)
+          .json({ error: "Access denied to this property" });
+      }
+
+      // Get settings for this property
+      const { data: settings, error } = await supabase
+        .from("property_billing_settings")
+        .select("*")
+        .eq("property_id", property_id)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        throw error;
+      }
+
+      // Return null if no settings found (not an error)
+      res.json({ settings: settings || null });
+    } else {
+      // Get all properties owned by this user for listing all settings
+      const { data: userProperties, error: propsError } = await supabase
+        .from("user_property")
+        .select("property_id")
+        .eq("user_id", userId);
+
+      if (propsError) throw propsError;
+
+      if (!userProperties || userProperties.length === 0) {
+        return res.json({ settings: [] });
+      }
+
+      const propertyIds = userProperties.map((p) => p.property_id);
+
+      // Get all settings for owned properties
+      const { data: settings, error } = await supabase
+        .from("property_billing_settings")
+        .select("*")
+        .in("property_id", propertyIds);
+
+      if (error) throw error;
+
+      console.log(
+        `[SECURITY] Found ${
+          settings?.length || 0
+        } billing settings for owner ${userId}`
+      );
+
+      res.json({ settings: settings || [] });
+    }
+  } catch (error) {
+    console.error("Get property billing settings error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch property billing settings" });
+  }
+});
+
+// PUT /owner/property-billing-settings - Create/update settings
+app.put("/owner/property-billing-settings", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { property_id, payment_day, notification_lead_days } = req.body;
+
+    console.log(
+      `[SECURITY] User ${userId} updating billing settings for property ${property_id}`
+    );
+    console.log("Settings params:", {
+      property_id,
+      payment_day,
+      notification_lead_days,
+    });
+
+    // Validate required fields
+    if (
+      !property_id ||
+      payment_day === undefined ||
+      notification_lead_days === undefined
+    ) {
+      return res.status(400).json({
+        error:
+          "property_id, payment_day, and notification_lead_days are required",
+      });
+    }
+
+    // Validate payment_day (1-31)
+    if (!Number.isInteger(payment_day) || payment_day < 1 || payment_day > 31) {
+      return res.status(400).json({
+        error: "payment_day must be an integer between 1 and 31",
+      });
+    }
+
+    // Validate notification_lead_days (0-31)
+    // Allow any value - can be >= payment_day (notification will be sent in previous month)
+    if (
+      !Number.isInteger(notification_lead_days) ||
+      notification_lead_days < 0 ||
+      notification_lead_days > 31
+    ) {
+      return res.status(400).json({
+        error: "notification_lead_days must be an integer between 0 and 31",
+      });
+    }
+
+    // Verify owner has access to this property
+    const { data: userProperty, error: accessError } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", userId)
+      .eq("property_id", property_id)
+      .single();
+
+    if (accessError || !userProperty) {
+      console.log(
+        `[SECURITY] Access denied for user ${userId} to property ${property_id}`
+      );
+      return res.status(403).json({ error: "Access denied to this property" });
+    }
+
+    // Upsert settings (insert or update)
+    const { data: settings, error } = await supabase
+      .from("property_billing_settings")
+      .upsert(
+        {
+          property_id: property_id,
+          owner_user_id: userId,
+          payment_day: payment_day,
+          notification_lead_days: notification_lead_days,
+        },
+        {
+          onConflict: "property_id",
+        }
+      )
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Database error details:", error);
+      throw error;
+    }
+
+    console.log(
+      `[SECURITY] Successfully saved billing settings for property ${property_id} by user ${userId}`
+    );
+
+    res.json({ settings });
+  } catch (error) {
+    console.error("Update property billing settings error:", error);
+    console.error("Error details:", error.message);
+    console.error("Error code:", error.code);
+    res.status(500).json({
+      error: "Failed to update property billing settings",
+      details: error.message,
+    });
+  }
+});
+
+// ============================================
+// BILLING NOTIFICATION BACKGROUND JOB
+// ============================================
 
 // PUT /notifications/:notificationId/read - Mark notification as read
 app.put("/notifications/:notificationId/read", async (req, res) => {
@@ -7571,4 +7657,45 @@ app.get("/tenant/scheduled-repayments", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
+
+  // ============================================
+  // BACKGROUND JOB: Daily Billing Notifications
+  // ============================================
+  // Get scheduled time from environment variable (format: "HH:MM", default: "00:00")
+  // Example: BILLING_JOB_TIME=05:10 (runs at 5:10 AM)
+  // For testing, you can set this to current time + 1 minute
+  const jobTime = process.env.BILLING_JOB_TIME || "00:00";
+  const [jobHour, jobMinute] = jobTime.split(":").map(Number);
+
+  console.log(
+    `[BILLING_JOB] Background job scheduled to run daily at ${jobTime}`
+  );
+
+  // Function to check if it's time to run the job
+  function shouldRunJob() {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    return currentHour === jobHour && currentMinute === jobMinute;
+  }
+
+  // Track last execution to avoid multiple runs in the same minute
+  let lastExecutionDate = null;
+
+  // Check every minute if it's time to run the job
+  setInterval(() => {
+    const now = new Date();
+    const currentDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+
+    if (shouldRunJob() && lastExecutionDate !== currentDateKey) {
+      lastExecutionDate = currentDateKey;
+      console.log(
+        `[BILLING_JOB] Triggering billing notification job at ${now.toISOString()}`
+      );
+      processBillingNotifications().catch((error) => {
+        console.error("[BILLING_JOB] Error in background job:", error);
+      });
+    }
+  }, 60000); // Check every minute (60000ms)
 });
