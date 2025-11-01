@@ -4499,7 +4499,7 @@ app.post("/loans", async (req, res) => {
         type: "loan_created",
         priority: "info",
         title: "New Loan Created",
-        message: `You have a new loan of ¥${amount.toLocaleString()} from ${ownerName}`,
+        message: `You have a new loan of $${amount.toLocaleString()} from ${ownerName}. Please see the repayment schedule.`,
         actionUrl: "/tenant/loan",
         actionLabel: "View Loan",
       });
@@ -5648,6 +5648,739 @@ app.put("/owner/property-billing-settings", async (req, res) => {
     });
   }
 });
+
+// ============================================
+// REPAYMENT NOTIFICATION SETTINGS ENDPOINTS
+// ============================================
+
+// Helper function to check if notification should be created based on notification date
+// Returns true if notification date has passed (including today) and is before due_date
+function shouldCreateRepaymentNotification(
+  dueDate,
+  leadDays,
+  today = new Date()
+) {
+  try {
+    const dueDateObj = new Date(dueDate);
+    dueDateObj.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+
+    // Calculate notification date: due_date - lead_days
+    const notificationDate = new Date(dueDateObj);
+    notificationDate.setDate(notificationDate.getDate() - leadDays);
+
+    // Notification should be created if:
+    // 1. Notification date has passed (including today)
+    // 2. And due_date hasn't passed yet (for overdue display)
+    const notificationDatePassed = notificationDate <= today;
+    const dueDateNotPassed = dueDateObj >= today;
+
+    return notificationDatePassed && dueDateNotPassed;
+  } catch (error) {
+    console.error("Error checking notification date:", error);
+    return false;
+  }
+}
+
+// Helper function to check if notification date matches today
+function isNotificationDateToday(dueDate, leadDays, today = new Date()) {
+  try {
+    const dueDateObj = new Date(dueDate);
+    dueDateObj.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+
+    // Calculate notification date: due_date - lead_days
+    const notificationDate = new Date(dueDateObj);
+    notificationDate.setDate(notificationDate.getDate() - leadDays);
+
+    // Check if notification date matches today exactly
+    return (
+      notificationDate.getFullYear() === today.getFullYear() &&
+      notificationDate.getMonth() === today.getMonth() &&
+      notificationDate.getDate() === today.getDate()
+    );
+  } catch (error) {
+    console.error("Error checking notification date:", error);
+    return false;
+  }
+}
+
+// Helper function to create repayment notifications for a given repayment
+// Returns the created notification or null if creation failed
+async function createRepaymentNotification({
+  repaymentId,
+  tenantUserId,
+  ownerUserId,
+  amount,
+  dueDate,
+  leadDays,
+}) {
+  try {
+    // Format due date for message
+    const dueDateObj = new Date(dueDate);
+    const dueDateStr = dueDateObj.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    // Create notification
+    const notification = await createNotification({
+      userId: tenantUserId,
+      type: "repayment_reminder",
+      priority: "info",
+      title: "Repayment Reminder",
+      message: `Your repayment of $${amount.toLocaleString()} is due on ${dueDateStr}`,
+      actionUrl: `/tenant/loan?repayment_id=${repaymentId}`,
+      actionLabel: "View Repayment",
+      expiresAt: null,
+    });
+
+    if (!notification) {
+      console.error(
+        `[REPAYMENT_NOTIFICATION] Failed to create notification for repayment ${repaymentId}`
+      );
+      return null;
+    }
+
+    // Create notification_repayment link
+    const { error: linkError } = await supabase
+      .from("notification_repayment")
+      .insert({
+        notification_id: notification.notification_id,
+        repayment_id: repaymentId,
+      });
+
+    if (linkError) {
+      console.error(
+        `[REPAYMENT_NOTIFICATION] Failed to link notification to repayment:`,
+        linkError
+      );
+      // Delete the notification if linking fails
+      await supabase
+        .from("notification")
+        .delete()
+        .eq("notification_id", notification.notification_id);
+      return null;
+    }
+
+    console.log(
+      `[REPAYMENT_NOTIFICATION] Created notification ${notification.notification_id} for repayment ${repaymentId} (due: ${dueDateStr})`
+    );
+
+    return notification;
+  } catch (error) {
+    console.error(
+      `[REPAYMENT_NOTIFICATION] Error creating notification for repayment ${repaymentId}:`,
+      error
+    );
+    return null;
+  }
+}
+
+// Helper function to recreate notifications for existing loans after settings update
+async function recreateRepaymentNotificationsForOwnerTenant(
+  ownerUserId,
+  tenantUserId,
+  enabled,
+  leadDays
+) {
+  try {
+    console.log(
+      `[REPAYMENT_NOTIFICATION] Recreating notifications for owner ${ownerUserId} and tenant ${tenantUserId}, enabled=${enabled}, lead_days=${leadDays}`
+    );
+
+    // If disabling notifications, delete all repayment notifications for this owner-tenant pair
+    if (!enabled) {
+      console.log(
+        `[REPAYMENT_NOTIFICATION] enabled=false - deleting all repayment notifications for owner ${ownerUserId} and tenant ${tenantUserId}`
+      );
+
+      // Step 1: Get all notification_repayment links
+      const { data: allLinks, error: linksError } = await supabase
+        .from("notification_repayment")
+        .select("notification_id, repayment_id");
+
+      if (linksError) {
+        console.error(
+          `[REPAYMENT_NOTIFICATION] Error fetching notification_repayment links:`,
+          linksError
+        );
+        return { success: false, error: linksError.message };
+      }
+
+      if (!allLinks || allLinks.length === 0) {
+        console.log(
+          `[REPAYMENT_NOTIFICATION] No notification_repayment links found`
+        );
+        return { success: true, processed: 0, created: 0 };
+      }
+
+      // Step 2: Get repayments for these links and filter by owner_user_id and tenant_user_id
+      const repaymentIds = allLinks.map((link) => link.repayment_id);
+
+      const { data: repayments, error: repayError } = await supabase
+        .from("repayment")
+        .select("repayment_id, owner_user_id, tenant_user_id")
+        .in("repayment_id", repaymentIds)
+        .eq("owner_user_id", ownerUserId)
+        .eq("tenant_user_id", tenantUserId);
+
+      if (repayError) {
+        console.error(
+          `[REPAYMENT_NOTIFICATION] Error fetching repayments:`,
+          repayError
+        );
+        return { success: false, error: repayError.message };
+      }
+
+      if (!repayments || repayments.length === 0) {
+        console.log(
+          `[REPAYMENT_NOTIFICATION] No repayments found for owner ${ownerUserId} and tenant ${tenantUserId}`
+        );
+        return { success: true, processed: 0, created: 0 };
+      }
+
+      // Step 3: Get notification_ids for matching repayments
+      const targetRepaymentIds = repayments.map((r) => r.repayment_id);
+      const targetNotificationIds = allLinks
+        .filter((link) => targetRepaymentIds.includes(link.repayment_id))
+        .map((link) => link.notification_id);
+
+      if (targetNotificationIds.length === 0) {
+        console.log(
+          `[REPAYMENT_NOTIFICATION] No notifications to delete for owner ${ownerUserId} and tenant ${tenantUserId}`
+        );
+        return { success: true, processed: 0, created: 0 };
+      }
+
+      // Step 4: Delete notifications (notification_repayment will be deleted automatically via CASCADE)
+      const { error: deleteError } = await supabase
+        .from("notification")
+        .delete()
+        .in("notification_id", targetNotificationIds)
+        .eq("type", "repayment_reminder");
+
+      if (deleteError) {
+        console.error(
+          `[REPAYMENT_NOTIFICATION] Error deleting notifications:`,
+          deleteError
+        );
+        return { success: false, error: deleteError.message };
+      }
+
+      console.log(
+        `[REPAYMENT_NOTIFICATION] Deleted ${targetNotificationIds.length} repayment notifications for owner ${ownerUserId} and tenant ${tenantUserId}`
+      );
+
+      return {
+        success: true,
+        processed: repayments.length,
+        created: 0,
+        deleted: targetNotificationIds.length,
+      };
+    }
+
+    // enabled=true: Continue with existing logic (create/skip notifications based on lead_days)
+    // Get all loans for this owner-tenant pair
+    const { data: loans, error: loansError } = await supabase
+      .from("loan")
+      .select("loan_id")
+      .eq("owner_user_id", ownerUserId)
+      .eq("tenant_user_id", tenantUserId);
+
+    if (loansError) {
+      console.error(
+        `[REPAYMENT_NOTIFICATION] Error fetching loans:`,
+        loansError
+      );
+      return { success: false, error: loansError.message };
+    }
+
+    if (!loans || loans.length === 0) {
+      console.log(
+        `[REPAYMENT_NOTIFICATION] No loans found for owner ${ownerUserId} and tenant ${tenantUserId}`
+      );
+      return { success: true, processed: 0, created: 0 };
+    }
+
+    let processedCount = 0;
+    let createdCount = 0;
+
+    // Process each loan
+    for (const loan of loans) {
+      // Get all repayments for this loan
+      const { data: repayments, error: repaymentsError } = await supabase
+        .from("repayment")
+        .select("repayment_id, amount, due_date, status, amount_paid")
+        .eq("loan_id", loan.loan_id)
+        .not("due_date", "is", null) // Only scheduled repayments
+        .neq("status", "confirmed"); // Exclude confirmed repayments
+
+      if (repaymentsError) {
+        console.error(
+          `[REPAYMENT_NOTIFICATION] Error fetching repayments for loan ${loan.loan_id}:`,
+          repaymentsError
+        );
+        continue;
+      }
+
+      if (!repayments || repayments.length === 0) {
+        continue;
+      }
+
+      // Process each repayment
+      for (const repayment of repayments) {
+        processedCount++;
+
+        // Check if notification already exists
+        const { data: existingLinks, error: checkError } = await supabase
+          .from("notification_repayment")
+          .select("notification_id")
+          .eq("repayment_id", repayment.repayment_id)
+          .limit(1);
+
+        if (checkError) {
+          console.error(
+            `[REPAYMENT_NOTIFICATION] Error checking existing notification:`,
+            checkError
+          );
+          continue;
+        }
+
+        // Handle existing notifications based on enabled state
+        if (existingLinks && existingLinks.length > 0) {
+          if (!enabled) {
+            // Delete existing notification when disabling
+            const { error: deleteError } = await supabase
+              .from("notification")
+              .delete()
+              .eq("notification_id", existingLinks[0].notification_id);
+
+            if (deleteError) {
+              console.error(
+                `[REPAYMENT_NOTIFICATION] Error deleting notification when disabling:`,
+                deleteError
+              );
+            } else {
+              console.log(
+                `[REPAYMENT_NOTIFICATION] Deleted notification for repayment ${repayment.repayment_id} (notifications disabled)`
+              );
+            }
+            // No need to create notification since enabled=false
+            continue;
+          } else {
+            // enabled=true: Skip existing notification (preserve display order for lead_days changes)
+            // Reason: Notification message is the same (due_date doesn't change),
+            // and recreating would change created_at, affecting display order
+            console.log(
+              `[REPAYMENT_NOTIFICATION] Skipping repayment ${repayment.repayment_id} - notification already exists (lead_days change doesn't affect existing notifications)`
+            );
+            continue;
+          }
+        }
+
+        // Create new notification if enabled (only for repayments without existing notifications)
+        if (enabled) {
+          const today = new Date();
+
+          // Check if notification date has passed (including today) and is before due_date
+          if (
+            !shouldCreateRepaymentNotification(
+              repayment.due_date,
+              leadDays,
+              today
+            )
+          ) {
+            console.log(
+              `[REPAYMENT_NOTIFICATION] Skipping notification for repayment ${repayment.repayment_id} (notification date hasn't arrived yet or due_date has passed)`
+            );
+            continue;
+          }
+
+          const notification = await createRepaymentNotification({
+            repaymentId: repayment.repayment_id,
+            tenantUserId: tenantUserId,
+            ownerUserId: ownerUserId,
+            amount: repayment.amount,
+            dueDate: repayment.due_date,
+            leadDays: leadDays,
+          });
+
+          if (notification) {
+            createdCount++;
+          }
+        }
+      }
+    }
+
+    console.log(
+      `[REPAYMENT_NOTIFICATION] Recreated notifications: processed=${processedCount}, created=${createdCount}`
+    );
+
+    return {
+      success: true,
+      processed: processedCount,
+      created: createdCount,
+    };
+  } catch (error) {
+    console.error(
+      `[REPAYMENT_NOTIFICATION] Error recreating notifications:`,
+      error
+    );
+    return { success: false, error: error.message };
+  }
+}
+
+// GET /owner/repayment-notification-settings - Get repayment notification settings
+app.get("/owner/repayment-notification-settings", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { tenant_user_id } = req.query;
+
+    console.log(
+      `[SECURITY] User ${userId} requesting repayment notification settings`
+    );
+
+    // If tenant_user_id provided, return single tenant's settings
+    if (tenant_user_id) {
+      const { data: settings, error } = await supabase
+        .from("repayment_notification_settings")
+        .select("*")
+        .eq("owner_user_id", userId)
+        .eq("tenant_user_id", tenant_user_id)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        throw error;
+      }
+
+      // Return null if no settings found (not an error)
+      res.json({ settings: settings || null });
+    } else {
+      // Get all settings for this owner
+      const { data: settings, error } = await supabase
+        .from("repayment_notification_settings")
+        .select("*")
+        .eq("owner_user_id", userId);
+
+      if (error) throw error;
+
+      console.log(
+        `[SECURITY] Found ${
+          settings?.length || 0
+        } repayment notification settings for owner ${userId}`
+      );
+
+      res.json({ settings: settings || [] });
+    }
+  } catch (error) {
+    console.error("Get repayment notification settings error:", error);
+    res.status(500).json({
+      error: "Failed to fetch repayment notification settings",
+    });
+  }
+});
+
+// PUT /owner/repayment-notification-settings - Create/update settings
+app.put("/owner/repayment-notification-settings", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { tenant_user_id, enabled, lead_days } = req.body;
+
+    console.log(
+      `[SECURITY] User ${userId} updating repayment notification settings for tenant ${tenant_user_id}`
+    );
+    console.log("Settings params:", {
+      tenant_user_id,
+      enabled,
+      lead_days,
+    });
+
+    // Validate required fields
+    if (!tenant_user_id || enabled === undefined || lead_days === undefined) {
+      return res.status(400).json({
+        error: "tenant_user_id, enabled, and lead_days are required",
+      });
+    }
+
+    // Validate enabled (boolean)
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({
+        error: "enabled must be a boolean",
+      });
+    }
+
+    // Validate lead_days (0-31)
+    if (!Number.isInteger(lead_days) || lead_days < 0 || lead_days > 31) {
+      return res.status(400).json({
+        error: "lead_days must be an integer between 0 and 31",
+      });
+    }
+
+    // Verify tenant exists and owner has relationship with tenant
+    // (Check if there's at least one loan or property relationship)
+    const { data: loanCheck } = await supabase
+      .from("loan")
+      .select("loan_id")
+      .eq("owner_user_id", userId)
+      .eq("tenant_user_id", tenant_user_id)
+      .limit(1);
+
+    // Check property relationship (simplified check)
+    let hasPropertyRelationship = false;
+    const { data: tenantProperties } = await supabase
+      .from("user_property")
+      .select("property_id")
+      .eq("user_id", tenant_user_id)
+      .limit(10);
+
+    if (tenantProperties && tenantProperties.length > 0) {
+      const propertyIds = tenantProperties.map((p) => p.property_id);
+      const { data: ownerProperties } = await supabase
+        .from("user_property")
+        .select("property_id")
+        .eq("user_id", userId)
+        .in("property_id", propertyIds)
+        .limit(1);
+      hasPropertyRelationship = ownerProperties && ownerProperties.length > 0;
+    }
+
+    if ((!loanCheck || loanCheck.length === 0) && !hasPropertyRelationship) {
+      console.log(
+        `[SECURITY] No relationship found between owner ${userId} and tenant ${tenant_user_id}`
+      );
+      return res.status(403).json({
+        error: "No relationship found with this tenant",
+      });
+    }
+
+    // Upsert settings (insert or update)
+    const { data: settings, error } = await supabase
+      .from("repayment_notification_settings")
+      .upsert(
+        {
+          tenant_user_id: tenant_user_id,
+          owner_user_id: userId,
+          enabled: enabled,
+          lead_days: lead_days,
+        },
+        {
+          onConflict: "tenant_user_id,owner_user_id",
+        }
+      )
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Database error details:", error);
+      throw error;
+    }
+
+    console.log(
+      `[SECURITY] Successfully saved repayment notification settings for tenant ${tenant_user_id} by owner ${userId}`
+    );
+
+    // Recreate notifications for existing loans with new settings
+    const recreateResult = await recreateRepaymentNotificationsForOwnerTenant(
+      userId,
+      tenant_user_id,
+      enabled,
+      lead_days
+    );
+
+    if (!recreateResult.success) {
+      console.error(
+        `[REPAYMENT_NOTIFICATION] Warning: Failed to recreate notifications:`,
+        recreateResult.error
+      );
+      // Don't fail the request, just log the error
+    }
+
+    res.json({
+      settings,
+      notifications_recreated: recreateResult.success
+        ? recreateResult.created
+        : 0,
+    });
+  } catch (error) {
+    console.error("Update repayment notification settings error:", error);
+    console.error("Error details:", error.message);
+    console.error("Error code:", error.code);
+    res.status(500).json({
+      error: "Failed to update repayment notification settings",
+      details: error.message,
+    });
+  }
+});
+
+// ============================================
+// REPAYMENT NOTIFICATION BACKGROUND JOB
+// ============================================
+
+// Background job function to create repayment notifications
+async function processRepaymentNotifications(testDate = null) {
+  try {
+    console.log(
+      "[REPAYMENT_NOTIFICATION_JOB] Starting repayment notification job"
+    );
+    if (testDate) {
+      console.log(
+        `[REPAYMENT_NOTIFICATION_JOB] TEST MODE: Using test date ${testDate}`
+      );
+    }
+
+    // Use test date if provided, otherwise use today
+    const today = testDate ? new Date(testDate) : new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get all scheduled repayments (where due_date IS NOT NULL and status != "confirmed")
+    // Include loan information to get owner_user_id and tenant_user_id
+    const { data: repayments, error: repaymentsError } = await supabase
+      .from("repayment")
+      .select(
+        `
+        repayment_id,
+        loan_id,
+        amount,
+        due_date,
+        status,
+        loan!inner(
+          owner_user_id,
+          tenant_user_id
+        )
+      `
+      )
+      .not("due_date", "is", null)
+      .neq("status", "confirmed");
+
+    if (repaymentsError) {
+      console.error(
+        "[REPAYMENT_NOTIFICATION_JOB] Error fetching repayments:",
+        repaymentsError
+      );
+      return { success: false, error: repaymentsError.message };
+    }
+
+    if (!repayments || repayments.length === 0) {
+      console.log("[REPAYMENT_NOTIFICATION_JOB] No scheduled repayments found");
+      return { success: true, processed: 0, created: 0 };
+    }
+
+    let processedCount = 0;
+    let createdCount = 0;
+    let skippedCount = 0;
+
+    // Process each repayment
+    for (const repayment of repayments) {
+      try {
+        const ownerUserId = repayment.loan.owner_user_id;
+        const tenantUserId = repayment.loan.tenant_user_id;
+
+        // Get repayment notification settings for this owner-tenant pair
+        const { data: settings } = await supabase
+          .from("repayment_notification_settings")
+          .select("enabled, lead_days")
+          .eq("owner_user_id", ownerUserId)
+          .eq("tenant_user_id", tenantUserId)
+          .single();
+
+        // Skip if no settings or disabled
+        if (!settings || !settings.enabled) {
+          skippedCount++;
+          continue;
+        }
+
+        // Check if notification date matches today exactly
+        if (
+          !isNotificationDateToday(
+            repayment.due_date,
+            settings.lead_days,
+            today
+          )
+        ) {
+          continue;
+        }
+
+        processedCount++;
+
+        // Check if notification already exists
+        const { data: existingLinks, error: checkError } = await supabase
+          .from("notification_repayment")
+          .select("notification_id")
+          .eq("repayment_id", repayment.repayment_id)
+          .limit(1);
+
+        if (checkError) {
+          console.error(
+            `[REPAYMENT_NOTIFICATION_JOB] Error checking existing notification for repayment ${repayment.repayment_id}:`,
+            checkError
+          );
+          continue;
+        }
+
+        // Delete existing notification if any (replace old one)
+        if (existingLinks && existingLinks.length > 0) {
+          const { error: deleteError } = await supabase
+            .from("notification")
+            .delete()
+            .eq("notification_id", existingLinks[0].notification_id);
+
+          if (deleteError) {
+            console.error(
+              `[REPAYMENT_NOTIFICATION_JOB] Error deleting old notification:`,
+              deleteError
+            );
+          } else {
+            console.log(
+              `[REPAYMENT_NOTIFICATION_JOB] Deleted old notification for repayment ${repayment.repayment_id}`
+            );
+          }
+        }
+
+        // Create new notification
+        const notification = await createRepaymentNotification({
+          repaymentId: repayment.repayment_id,
+          tenantUserId: tenantUserId,
+          ownerUserId: ownerUserId,
+          amount: repayment.amount,
+          dueDate: repayment.due_date,
+          leadDays: settings.lead_days,
+        });
+
+        if (notification) {
+          createdCount++;
+          console.log(
+            `[REPAYMENT_NOTIFICATION_JOB] Created notification for repayment ${repayment.repayment_id} (due: ${repayment.due_date})`
+          );
+        } else {
+          console.error(
+            `[REPAYMENT_NOTIFICATION_JOB] Failed to create notification for repayment ${repayment.repayment_id}`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[REPAYMENT_NOTIFICATION_JOB] Error processing repayment ${repayment.repayment_id}:`,
+          error
+        );
+      }
+    }
+
+    console.log(
+      `[REPAYMENT_NOTIFICATION_JOB] Job completed: processed=${processedCount}, created=${createdCount}, skipped=${skippedCount}`
+    );
+
+    return {
+      success: true,
+      processed: processedCount,
+      created: createdCount,
+      skipped: skippedCount,
+    };
+  } catch (error) {
+    console.error("[REPAYMENT_NOTIFICATION_JOB] Job error:", error);
+    return { success: false, error: error.message };
+  }
+}
 
 // ============================================
 // BILLING NOTIFICATION BACKGROUND JOB
@@ -7538,6 +8271,87 @@ app.post("/owner/create-repayment-schedule", async (req, res) => {
       console.error("Auto-consume credit error (non-critical):", consumeErr);
     }
 
+    // Create repayment notifications for each repayment (non-blocking)
+    try {
+      // Get repayment notification settings for this owner-tenant pair
+      const { data: settings } = await supabase
+        .from("repayment_notification_settings")
+        .select("enabled, lead_days")
+        .eq("owner_user_id", loan.owner_user_id)
+        .eq("tenant_user_id", loan.tenant_user_id)
+        .single();
+
+      if (settings && settings.enabled) {
+        const today = new Date();
+        let createdCount = 0;
+
+        // Create notifications for each repayment
+        for (const repayment of createdRepayments) {
+          // Skip if status is confirmed
+          if (repayment.status === "confirmed") {
+            continue;
+          }
+
+          // Check if notification date has passed (including today) and is before due_date
+          if (
+            !shouldCreateRepaymentNotification(
+              repayment.due_date,
+              settings.lead_days,
+              today
+            )
+          ) {
+            console.log(
+              `[REPAYMENT_NOTIFICATION] Skipping notification for repayment ${repayment.repayment_id} (notification date hasn't arrived yet or due_date has passed)`
+            );
+            continue;
+          }
+
+          // Check if notification already exists
+          const { data: existingLinks } = await supabase
+            .from("notification_repayment")
+            .select("notification_id")
+            .eq("repayment_id", repayment.repayment_id)
+            .limit(1);
+
+          if (existingLinks && existingLinks.length > 0) {
+            // Delete existing notification if any
+            await supabase
+              .from("notification")
+              .delete()
+              .eq("notification_id", existingLinks[0].notification_id);
+          }
+
+          // Create notification (notification date has passed, so create it now)
+          const notification = await createRepaymentNotification({
+            repaymentId: repayment.repayment_id,
+            tenantUserId: loan.tenant_user_id,
+            ownerUserId: loan.owner_user_id,
+            amount: repayment.amount,
+            dueDate: repayment.due_date,
+            leadDays: settings.lead_days,
+          });
+
+          if (notification) {
+            createdCount++;
+          }
+        }
+
+        console.log(
+          `[REPAYMENT_NOTIFICATION] Created ${createdCount} notifications (out of ${createdRepayments.length} repayments)`
+        );
+      } else {
+        console.log(
+          `[REPAYMENT_NOTIFICATION] Notifications disabled or no settings found for owner ${loan.owner_user_id} and tenant ${loan.tenant_user_id}`
+        );
+      }
+    } catch (notificationError) {
+      // Don't block schedule creation if notification fails
+      console.error(
+        "Failed to create repayment notifications (non-critical):",
+        notificationError
+      );
+    }
+
     res.json({
       success: true,
       repayments: createdRepayments,
@@ -7711,7 +8525,7 @@ app.listen(PORT, () => {
   // Track last execution to avoid multiple runs in the same minute
   let lastExecutionDate = null;
 
-  // Check every minute if it's time to run the job
+  // Check every minute if it's time to run the billing notification job
   setInterval(() => {
     const now = new Date();
     const currentDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
@@ -7723,6 +8537,54 @@ app.listen(PORT, () => {
       );
       processBillingNotifications().catch((error) => {
         console.error("[BILLING_JOB] Error in background job:", error);
+      });
+    }
+  }, 60000); // Check every minute (60000ms)
+
+  // ============================================
+  // BACKGROUND JOB: Daily Repayment Notifications
+  // ============================================
+  // Get scheduled time from environment variable (format: "HH:MM", default: "00:00")
+  // Example: REPAYMENT_JOB_TIME=05:10 (runs at 5:10 AM)
+  // Uses same time as billing job if REPAYMENT_JOB_TIME is not set
+  const repaymentJobTime = process.env.REPAYMENT_JOB_TIME || jobTime;
+  const [repaymentJobHour, repaymentJobMinute] = repaymentJobTime
+    .split(":")
+    .map(Number);
+
+  console.log(
+    `[REPAYMENT_JOB] Background job scheduled to run daily at ${repaymentJobTime}`
+  );
+
+  // Function to check if it's time to run the repayment notification job
+  function shouldRunRepaymentJob() {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    return (
+      currentHour === repaymentJobHour && currentMinute === repaymentJobMinute
+    );
+  }
+
+  // Track last execution to avoid multiple runs in the same minute
+  let lastRepaymentExecutionDate = null;
+
+  // Check every minute if it's time to run the repayment notification job
+  setInterval(() => {
+    const now = new Date();
+    const currentDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+
+    if (
+      shouldRunRepaymentJob() &&
+      lastRepaymentExecutionDate !== currentDateKey
+    ) {
+      lastRepaymentExecutionDate = currentDateKey;
+      console.log(
+        `[REPAYMENT_JOB] Triggering repayment notification job at ${now.toISOString()}`
+      );
+      processRepaymentNotifications().catch((error) => {
+        console.error("[REPAYMENT_JOB] Error in background job:", error);
       });
     }
   }, 60000); // Check every minute (60000ms)

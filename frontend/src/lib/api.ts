@@ -31,10 +31,10 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     let errorData;
     try {
       errorData = await response.json();
-    } catch (parseError) {
+    } catch {
       // JSONパースに失敗した場合は、ステータスコードに基づいてエラーメッセージを生成
       if (response.status === 404) {
-        errorData = { error: "Tenant not found." };
+        errorData = { error: `Endpoint not found: ${endpoint}` };
       } else if (response.status === 400) {
         errorData = { error: "Bad request." };
       } else {
@@ -475,6 +475,26 @@ export const api = {
     notification_lead_days: number;
   }) => {
     return apiRequest("/owner/property-billing-settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Get repayment notification settings
+  getRepaymentNotificationSettings: (tenantUserId?: string) => {
+    const url = tenantUserId
+      ? `/owner/repayment-notification-settings?tenant_user_id=${tenantUserId}`
+      : "/owner/repayment-notification-settings";
+    return apiRequest(url);
+  },
+
+  // Update repayment notification settings
+  updateRepaymentNotificationSettings: (data: {
+    tenant_user_id: string;
+    enabled: boolean;
+    lead_days: number;
+  }) => {
+    return apiRequest("/owner/repayment-notification-settings", {
       method: "PUT",
       body: JSON.stringify(data),
     });

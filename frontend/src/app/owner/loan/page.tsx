@@ -931,62 +931,62 @@ function CreateLoanModal({
               </h3>
               <div className="space-y-4">
                 <div>
-          <label
-            htmlFor="tenant"
+                  <label
+                    htmlFor="tenant"
                     className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Tenant:
-          </label>
-          <select
-            id="tenant"
-            value={selectedTenantId || ""}
-            onChange={(e) => setSelectedTenantId(e.target.value)}
+                  >
+                    Tenant:
+                  </label>
+                  <select
+                    id="tenant"
+                    value={selectedTenantId || ""}
+                    onChange={(e) => setSelectedTenantId(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={isCreating}
-          >
-            <option value="">Select a tenant</option>
-            {groupedTenants.map((tenant) => (
-              <option key={tenant.user_id} value={tenant.user_id}>
-                {tenant.display_name}
-              </option>
-            ))}
-          </select>
-        </div>
+                  >
+                    <option value="">Select a tenant</option>
+                    {groupedTenants.map((tenant) => (
+                      <option key={tenant.user_id} value={tenant.user_id}>
+                        {tenant.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
-          <label
-            htmlFor="amount"
+                  <label
+                    htmlFor="amount"
                     className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Amount:
-          </label>
-          <input
-            type="number"
-            id="amount"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+                  >
+                    Amount:
+                  </label>
+                  <input
+                    type="number"
+                    id="amount"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter loan amount"
-            min="0"
+                    placeholder="Enter loan amount"
+                    min="0"
                     step="0.01"
                     disabled={isCreating}
-          />
-        </div>
+                  />
+                </div>
                 <div>
-          <label
-            htmlFor="note"
+                  <label
+                    htmlFor="note"
                     className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Note (Optional):
-          </label>
-          <textarea
-            id="note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
+                  >
+                    Note (Optional):
+                  </label>
+                  <textarea
+                    id="note"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
                     className="w-full px-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-24"
-            placeholder="Add a note for the loan"
+                    placeholder="Add a note for the loan"
                     disabled={isCreating}
-          ></textarea>
-        </div>
+                  ></textarea>
+                </div>
               </div>
             </div>
 
@@ -1392,15 +1392,15 @@ function CreateLoanModal({
 
           {/* Buttons */}
           <div className="mt-6 flex justify-end space-x-3">
-          <button
-            onClick={onClose}
+            <button
+              onClick={onClose}
               className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-            disabled={isCreating}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreateLoan}
+              disabled={isCreating}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateLoan}
               disabled={
                 isCreating ||
                 !selectedTenantId ||
@@ -1412,9 +1412,9 @@ function CreateLoanModal({
                 (scheduleType === "month_end" && !monthEndMonth)
               }
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            {isCreating ? "Creating..." : "Create Loan"}
-          </button>
+            >
+              {isCreating ? "Creating..." : "Create Loan"}
+            </button>
           </div>
         </div>
       </div>

@@ -46,12 +46,17 @@ export function NotificationItem({
 
   // Extract payment date from message and calculate countdown
   const countdownInfo = useMemo(() => {
-    // Only process payment_reminder notifications
-    if (notification.type !== "payment_reminder") {
+    // Process payment_reminder and repayment_reminder notifications
+    if (
+      notification.type !== "payment_reminder" &&
+      notification.type !== "repayment_reminder"
+    ) {
       return null;
     }
 
-    // Parse date from message: "Your bill is due on November 5, 2025 for [Property]"
+    // Parse date from message:
+    // Payment: "Your bill is due on November 5, 2025 for [Property]"
+    // Repayment: "Your repayment of $500 is due on November 1, 2025"
     // Try to extract date string like "November 5, 2025"
     const dateMatch = notification.message.match(
       /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})/

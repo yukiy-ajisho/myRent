@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useProperty } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
 import { getAuthState } from "@/lib/auth-state-client";
@@ -14,6 +14,24 @@ interface BillingSettings {
   notification_lead_days: number;
   created_at: string;
   updated_at: string;
+}
+
+interface RepaymentNotificationSettings {
+  tenant_user_id: string;
+  owner_user_id: string;
+  enabled: boolean;
+  lead_days: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Tenant {
+  user_id: string;
+  name: string;
+  email: string;
+  property_id: string;
+  property_name: string;
+  nick_name?: string | null;
 }
 
 // Helper function to calculate effective payment day and notification date
@@ -70,6 +88,23 @@ export default function SettingsPage() {
     "checking"
   );
   const router = useRouter();
+
+  // Repayment notification settings state
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [repaymentSettings, setRepaymentSettings] = useState<
+    Record<string, RepaymentNotificationSettings>
+  >({});
+  const [repaymentEnabled, setRepaymentEnabled] = useState<
+    Record<string, boolean>
+  >({});
+  const [repaymentLeadDays, setRepaymentLeadDays] = useState<
+    Record<string, number>
+  >({});
+  const [isSavingRepaymentSettings, setIsSavingRepaymentSettings] = useState<
+    Record<string, boolean>
+  >({});
+  const [selectedTenantId, setSelectedTenantId] = useState<string>("");
+  const isInitialTenantLoad = useRef(true);
 
   // Calculate preview dates for current month
   const previewDates = useMemo(() => {
@@ -161,6 +196,114 @@ export default function SettingsPage() {
       setSelectedPropertyId(userProperties[0].property_id);
     }
   }, [userProperties, selectedPropertyId]);
+
+  // Fetch tenants for repayment notification settings
+  useEffect(() => {
+    const fetchTenants = async () => {
+      try {
+        const allPropertiesTenants = await Promise.all(
+          userProperties.map(async (p) => {
+            const res = await api.getOwnerTenants({
+              propertyId: p.property_id,
+            });
+            return res.tenants.map((t: Tenant) => ({
+              user_id: t.user_id,
+              name: t.name,
+              email: t.email,
+              property_id: p.property_id,
+              property_name: p.name,
+              nick_name: t.nick_name || null,
+            }));
+          })
+        );
+        const flatTenants = allPropertiesTenants.flat();
+        // Group by user_id and combine property names
+        const grouped = flatTenants.reduce((acc, tenant) => {
+          if (!acc[tenant.user_id]) {
+            acc[tenant.user_id] = {
+              user_id: tenant.user_id,
+              name: tenant.name,
+              email: tenant.email,
+              properties: [],
+              nick_name: tenant.nick_name,
+            };
+          }
+          acc[tenant.user_id].properties.push(tenant.property_name);
+          return acc;
+        }, {} as Record<string, { user_id: string; name: string; email: string; properties: string[]; nick_name: string | null }>);
+
+        const groupedArray: Array<{
+          user_id: string;
+          name: string;
+          email: string;
+          properties: string[];
+          nick_name: string | null;
+        }> = Object.values(grouped);
+
+        const finalTenants = groupedArray.map((group) => ({
+          user_id: group.user_id,
+          name: group.name,
+          email: group.email,
+          property_id: "", // Not used for grouped tenants
+          property_name: group.properties.join(", "),
+          nick_name: group.nick_name,
+        }));
+
+        setTenants(finalTenants);
+
+        // Load repayment notification settings for all tenants
+        let settingsList: RepaymentNotificationSettings[] = [];
+        try {
+          const settingsResponse = await api.getRepaymentNotificationSettings();
+          settingsList = settingsResponse.settings || [];
+        } catch (error) {
+          // If settings endpoint returns 404 or other errors, just use empty array
+          // This is fine - it means no settings exist yet
+          console.warn(
+            "Could not load repayment notification settings:",
+            error
+          );
+          settingsList = [];
+        }
+
+        const settingsMap: Record<string, RepaymentNotificationSettings> = {};
+        const enabledMap: Record<string, boolean> = {};
+        const leadDaysMap: Record<string, number> = {};
+
+        settingsList.forEach((setting: RepaymentNotificationSettings) => {
+          settingsMap[setting.tenant_user_id] = setting;
+          enabledMap[setting.tenant_user_id] = setting.enabled;
+          leadDaysMap[setting.tenant_user_id] = setting.lead_days;
+        });
+
+        // Set defaults for tenants without settings
+        finalTenants.forEach((tenant) => {
+          if (!enabledMap[tenant.user_id]) {
+            enabledMap[tenant.user_id] = false; // Default: disabled (user must explicitly enable)
+          }
+          if (!leadDaysMap[tenant.user_id]) {
+            leadDaysMap[tenant.user_id] = 3; // Default: 3 days
+          }
+        });
+
+        setRepaymentSettings(settingsMap);
+        setRepaymentEnabled(enabledMap);
+        setRepaymentLeadDays(leadDaysMap);
+
+        // Auto-select first tenant if available (only on initial load)
+        if (finalTenants.length > 0 && isInitialTenantLoad.current) {
+          setSelectedTenantId(finalTenants[0].user_id);
+          isInitialTenantLoad.current = false;
+        }
+      } catch (error) {
+        console.error("Error loading tenants:", error);
+      }
+    };
+
+    if (userProperties.length > 0) {
+      fetchTenants();
+    }
+  }, [userProperties]);
 
   const handleSave = async () => {
     if (!selectedPropertyId) {
@@ -368,6 +511,227 @@ export default function SettingsPage() {
               </p>
             </div>
           )}
+
+          {/* Repayment Notification Settings */}
+          <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Repayment Notification Settings
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Configure when tenants receive notifications about upcoming loan
+              repayments. Settings are applied per tenant.
+            </p>
+
+            {tenants.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No tenants found. Add tenants to properties to configure
+                repayment notifications.
+              </div>
+            ) : (
+              <>
+                {/* Tenant Selector */}
+                <div className="mb-6">
+                  <label
+                    htmlFor="tenant-select"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Select Tenant
+                  </label>
+                  <select
+                    id="tenant-select"
+                    value={selectedTenantId}
+                    onChange={(e) => setSelectedTenantId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="">Select a tenant...</option>
+                    {tenants.map((tenant) => (
+                      <option key={tenant.user_id} value={tenant.user_id}>
+                        {tenant.nick_name || tenant.name} ({tenant.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selected Tenant Settings */}
+                {selectedTenantId && (
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    {(() => {
+                      const tenant = tenants.find(
+                        (t) => t.user_id === selectedTenantId
+                      );
+                      if (!tenant) return null;
+
+                      return (
+                        <>
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900">
+                                {tenant.nick_name || tenant.name}
+                              </h4>
+                              <p className="text-xs text-gray-500">
+                                {tenant.email}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                Properties: {tenant.property_name}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Enabled Toggle */}
+                          <div className="mb-4">
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  repaymentEnabled[tenant.user_id] ?? false
+                                }
+                                onChange={(e) => {
+                                  setRepaymentEnabled({
+                                    ...repaymentEnabled,
+                                    [tenant.user_id]: e.target.checked,
+                                  });
+                                }}
+                                disabled={
+                                  isSavingRepaymentSettings[tenant.user_id]
+                                }
+                                className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                              />
+                              <span className="text-sm font-medium text-gray-700">
+                                Enable repayment notifications
+                              </span>
+                            </label>
+                          </div>
+
+                          {/* Lead Days - Always visible when tenant is selected */}
+                          <div className="mb-4">
+                            <label
+                              htmlFor={`lead-days-${tenant.user_id}`}
+                              className="block text-sm font-medium text-gray-700 mb-2"
+                            >
+                              Notification Lead Days (0-31)
+                            </label>
+                            <select
+                              id={`lead-days-${tenant.user_id}`}
+                              value={repaymentLeadDays[tenant.user_id] ?? 3}
+                              onChange={(e) => {
+                                setRepaymentLeadDays({
+                                  ...repaymentLeadDays,
+                                  [tenant.user_id]: Number(e.target.value),
+                                });
+                              }}
+                              disabled={
+                                isSavingRepaymentSettings[tenant.user_id]
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100"
+                            >
+                              {Array.from({ length: 32 }, (_, i) => i).map(
+                                (days) => (
+                                  <option key={days} value={days}>
+                                    {days}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                            <p className="mt-1 text-xs text-gray-500">
+                              Number of days before repayment due date to send
+                              notification
+                            </p>
+                          </div>
+
+                          {/* Save Button */}
+                          <button
+                            onClick={async () => {
+                              try {
+                                setIsSavingRepaymentSettings({
+                                  ...isSavingRepaymentSettings,
+                                  [tenant.user_id]: true,
+                                });
+                                setMessage(null);
+
+                                await api.updateRepaymentNotificationSettings({
+                                  tenant_user_id: tenant.user_id,
+                                  enabled:
+                                    repaymentEnabled[tenant.user_id] ?? true,
+                                  lead_days:
+                                    repaymentLeadDays[tenant.user_id] ?? 3,
+                                });
+
+                                // Reload settings
+                                try {
+                                  const response =
+                                    await api.getRepaymentNotificationSettings(
+                                      tenant.user_id
+                                    );
+                                  if (response.settings) {
+                                    setRepaymentSettings({
+                                      ...repaymentSettings,
+                                      [tenant.user_id]: response.settings,
+                                    });
+                                  }
+                                } catch (error) {
+                                  console.warn(
+                                    "Could not reload settings after save:",
+                                    error
+                                  );
+                                }
+
+                                setMessage({
+                                  type: "success",
+                                  text: `Settings saved for ${
+                                    tenant.nick_name || tenant.name
+                                  }`,
+                                });
+
+                                setTimeout(() => {
+                                  setMessage(null);
+                                }, 3000);
+                              } catch (error) {
+                                console.error(
+                                  "Error saving repayment settings:",
+                                  error
+                                );
+                                const errorMessage =
+                                  error &&
+                                  typeof error === "object" &&
+                                  "error" in error
+                                    ? String(error.error)
+                                    : "Failed to save settings";
+                                setMessage({
+                                  type: "error",
+                                  text: errorMessage,
+                                });
+                              } finally {
+                                setIsSavingRepaymentSettings({
+                                  ...isSavingRepaymentSettings,
+                                  [tenant.user_id]: false,
+                                });
+                              }
+                            }}
+                            disabled={isSavingRepaymentSettings[tenant.user_id]}
+                            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-sm"
+                          >
+                            {isSavingRepaymentSettings[tenant.user_id]
+                              ? "Saving..."
+                              : "Save Settings"}
+                          </button>
+
+                          {/* Last Updated Info */}
+                          {repaymentSettings[tenant.user_id] && (
+                            <p className="mt-2 text-xs text-gray-400">
+                              Last updated:{" "}
+                              {new Date(
+                                repaymentSettings[tenant.user_id].updated_at
+                              ).toLocaleString()}
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </>
       ) : (
         <div className="bg-white rounded-lg shadow-md p-6 text-center text-gray-500">
