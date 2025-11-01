@@ -537,12 +537,7 @@ export const api = {
     return apiRequest("/tenant/scheduled-payments");
   },
 
-  payScheduledPayment: (amount: number) => {
-    return apiRequest("/tenant/pay-scheduled-payment", {
-      method: "POST",
-      body: JSON.stringify({ amount }),
-    });
-  },
+  // payScheduledPayment: REMOVED - Auto-allocation feature has been removed
 
   // Owner Repayment Schedule functions
   getLoansForSchedule: () => {

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useProperty, Property } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
-import PaymentScheduleModal from "@/components/PaymentScheduleModal";
+// import PaymentScheduleModal from "@/components/PaymentScheduleModal"; // HIDDEN
 
 // Bill Line データの型定義
 interface BillLine {
@@ -39,29 +39,29 @@ interface Payment {
   confirmedAt: string | null;
 }
 
-// Scheduled Payment データの型定義
-interface ScheduledPayment {
-  payment_id: string;
-  user_id: string;
-  property_id: string;
-  amount: number;
-  amount_paid: number;
-  is_auto_paid: boolean;
-  note: string;
-  paid_at: string | null;
-  due_date: string;
-  bill_run_id: number;
-  app_user: {
-    name: string;
-    email: string;
-    nick_name?: string | null;
-  };
-  bill_run: {
-    month_start: string;
-  };
-  isAccepted: boolean;
-  confirmedAt: string | null;
-}
+// Scheduled Payment データの型定義 - HIDDEN
+// interface ScheduledPayment {
+//   payment_id: string;
+//   user_id: string;
+//   property_id: string;
+//   amount: number;
+//   amount_paid: number;
+//   is_auto_paid: boolean;
+//   note: string;
+//   paid_at: string | null;
+//   due_date: string;
+//   bill_run_id: number;
+//   app_user: {
+//     name: string;
+//     email: string;
+//     nick_name?: string | null;
+//   };
+//   bill_run: {
+//     month_start: string;
+//   };
+//   isAccepted: boolean;
+//   confirmedAt: string | null;
+// }
 
 export default function History() {
   const { userProperties } = useProperty();
@@ -79,11 +79,11 @@ export default function History() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
 
-  // Scheduled Payments の状態
-  const [scheduledPayments, setScheduledPayments] = useState<
-    ScheduledPayment[]
-  >([]);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  // Scheduled Payments の状態 - HIDDEN
+  // const [scheduledPayments, setScheduledPayments] = useState<
+  //   ScheduledPayment[]
+  // >([]);
+  // const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   // 共通の状態
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(
@@ -105,8 +105,8 @@ export default function History() {
     await fetchBillData();
     // Payment History データを取得
     await fetchPaymentData();
-    // Scheduled Payments データを取得
-    await fetchScheduledPayments();
+    // Scheduled Payments データを取得 - HIDDEN
+    // await fetchScheduledPayments();
   };
 
   const fetchBillData = async () => {
@@ -155,22 +155,22 @@ export default function History() {
     }
   };
 
-  const fetchScheduledPayments = async () => {
-    try {
-      console.log("=== SCHEDULED PAYMENTS DEBUG ===");
-      console.log("Fetching scheduled payments...");
+  // const fetchScheduledPayments = async () => { // HIDDEN
+  //   try {
+  //     console.log("=== SCHEDULED PAYMENTS DEBUG ===");
+  //     console.log("Fetching scheduled payments...");
 
-      const data = await api.getScheduledPayments();
-      console.log("Scheduled payments response:", data);
+  //     const data = await api.getScheduledPayments();
+  //     console.log("Scheduled payments response:", data);
 
-      const scheduled = data.scheduled_payments || [];
-      console.log("Number of scheduled payments:", scheduled.length);
+  //     const scheduled = data.scheduled_payments || [];
+  //     console.log("Number of scheduled payments:", scheduled.length);
 
-      setScheduledPayments(scheduled);
-    } catch (error) {
-      console.error("Error loading scheduled payments:", error);
-    }
-  };
+  //     setScheduledPayments(scheduled);
+  //   } catch (error) {
+  //     console.error("Error loading scheduled payments:", error);
+  //   }
+  // };
 
   // プロパティ選択のハンドラー
   const handlePropertyChange = (propertyId: string) => {
@@ -203,17 +203,17 @@ export default function History() {
 
       // Reload all payments to update status
       fetchPaymentData();
-      fetchScheduledPayments();
+      // fetchScheduledPayments(); // HIDDEN
     } catch (error) {
       console.error("Error accepting payment:", error);
       setPaymentMessage("Error occurred while accepting payment");
     }
   };
 
-  const handleScheduleSuccess = () => {
-    setPaymentMessage("Payment schedule created successfully!");
-    fetchScheduledPayments();
-  };
+  // const handleScheduleSuccess = () => { // HIDDEN
+  //   setPaymentMessage("Payment schedule created successfully!");
+  //   fetchScheduledPayments();
+  // };
 
   // Bill History のフィルタリング
   const propertyFilteredBillLines = selectedProperty
@@ -281,12 +281,12 @@ export default function History() {
       )
     : allPayments;
 
-  // Scheduled Payments のフィルタリング
-  const filteredScheduledPayments = selectedProperty
-    ? scheduledPayments.filter(
-        (payment) => payment.property_id === selectedProperty.property_id
-      )
-    : scheduledPayments;
+  // Scheduled Payments のフィルタリング - HIDDEN
+  // const filteredScheduledPayments = selectedProperty
+  //   ? scheduledPayments.filter(
+  //       (payment) => payment.property_id === selectedProperty.property_id
+  //     )
+  //   : scheduledPayments;
 
   // デバッグログ
   console.log("=== RENDER DEBUG ===");
@@ -647,155 +647,13 @@ export default function History() {
             </div>
           )}
 
-          {/* Scheduled Payments Section */}
-          <div className="mt-8">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900">
-                Scheduled Payments
-              </h3>
-              <button
-                onClick={() => setShowScheduleModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                Create Schedule
-              </button>
-            </div>
+          {/* Scheduled Payments Section - HIDDEN */}
+          {/* <div className="mt-8">
+            ... scheduled payments section ...
+          </div> */}
 
-            {filteredScheduledPayments.length === 0 ? (
-              <div className="bg-gray-50 border border-gray-200 rounded-md p-6 text-center">
-                <p className="text-gray-600">
-                  No scheduled payments found
-                  {selectedProperty ? ` for ${selectedProperty.name}` : ""}.
-                </p>
-                <p className="text-gray-500 text-sm mt-2">
-                  Create a payment schedule to set up installments for tenants.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                <div className="grid grid-cols-8 gap-0">
-                  {/* ヘッダー行 */}
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200">
-                    Name
-                  </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
-                    Property
-                  </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
-                    Bill Month
-                  </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
-                    Due Date
-                  </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-12">
-                    Scheduled
-                  </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-16">
-                    Paid
-                  </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-9">
-                    Status
-                  </div>
-                  <div className="font-semibold text-gray-700 pb-2 border-b border-gray-200 pl-16">
-                    Action
-                  </div>
-
-                  {/* データ行 */}
-                  {filteredScheduledPayments.map((payment) => {
-                    const isPaid =
-                      payment.isAccepted ||
-                      payment.amount_paid >= payment.amount;
-                    const isPartiallyPaid =
-                      (payment.amount_paid || 0) > 0 && !isPaid;
-                    const isPending = payment.paid_at && !payment.isAccepted;
-
-                    return (
-                      <div key={payment.payment_id} className="contents">
-                        <div className="text-left py-3">
-                          <div className="text-lg font-semibold text-gray-900">
-                            {payment.app_user.nick_name ||
-                              payment.app_user.name}
-                          </div>
-                        </div>
-                        <div className="text-gray-600 py-3 pl-9">
-                          {userProperties.find(
-                            (p) => p.property_id === payment.property_id
-                          )?.name || "Unknown Property"}
-                        </div>
-                        <div className="text-gray-600 py-3 pl-9">
-                          {payment.bill_run?.month_start
-                            ? payment.bill_run.month_start.substring(0, 7)
-                            : "N/A"}
-                        </div>
-                        <div className="text-gray-600 py-3 pl-9">
-                          {new Date(payment.due_date).toLocaleDateString()}
-                        </div>
-                        <div className="py-3 pl-12">
-                          <div className="text-lg font-bold">
-                            ${payment.amount.toFixed(2)}
-                          </div>
-                        </div>
-                        <div className="py-3 pl-16">
-                          <div className="text-lg font-bold text-green-600">
-                            ${(payment.amount_paid || 0).toFixed(2)}
-                            {payment.is_auto_paid &&
-                              (payment.amount_paid || 0) > 0 && (
-                                <span className="ml-1 text-xs text-blue-600">
-                                  💰
-                                </span>
-                              )}
-                          </div>
-                        </div>
-                        <div className="py-3 pl-9">
-                          {isPaid && (
-                            <span className="text-green-600 text-sm font-medium">
-                              ✅ Paid
-                            </span>
-                          )}
-                          {isPending && (
-                            <span className="text-yellow-600 text-sm font-medium">
-                              ⏳ Pending
-                            </span>
-                          )}
-                          {isPartiallyPaid && (
-                            <span className="text-blue-600 text-sm font-medium">
-                              🔵 Partial
-                            </span>
-                          )}
-                          {!isPaid && !isPending && !isPartiallyPaid && (
-                            <span className="text-red-600 text-sm font-medium">
-                              ❌ Unpaid
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-center py-3 pl-6">
-                          {isPending ? (
-                            <button
-                              onClick={() =>
-                                handleAcceptPayment(payment.payment_id)
-                              }
-                              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
-                            >
-                              Confirm
-                            </button>
-                          ) : (
-                            <span className="text-gray-400 text-sm">-</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Payment Schedule Modal */}
-          <PaymentScheduleModal
-            isOpen={showScheduleModal}
-            onClose={() => setShowScheduleModal(false)}
-            onSuccess={handleScheduleSuccess}
-          />
+          {/* Payment Schedule Modal - HIDDEN */}
+          {/* <PaymentScheduleModal ... /> */}
         </div>
       )}
     </div>
