@@ -141,12 +141,21 @@ export default function CalculateModal({
 
   // Initialize selectedMonth when billRuns are loaded
   useEffect(() => {
-    if (billRuns.length > 0 && !selectedMonth) {
-      const latestMonth = billRuns[0].month_start; // 既に降順でソート済み
-      if (latestMonth) {
-        const nextMonth = getNextMonth(latestMonth);
-        setSelectedMonth(nextMonth);
+    // Only initialize if selectedMonth is not already set
+    if (!selectedMonth) {
+      if (billRuns.length > 0) {
+        // billRunsが存在する場合、最新の次の月を設定
+        const latestMonth = billRuns[0].month_start; // 既に降順でソート済み
+        if (latestMonth) {
+          const nextMonth = getNextMonth(latestMonth);
+          setSelectedMonth(nextMonth);
+        } else {
+          // latestMonthがnullの場合、現在の月を設定
+          const now = new Date();
+          setSelectedMonth(now.toISOString().slice(0, 7));
+        }
       } else {
+        // billRunsが空の場合（レコードがない場合）、現在の月を設定
         const now = new Date();
         setSelectedMonth(now.toISOString().slice(0, 7));
       }
