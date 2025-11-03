@@ -101,7 +101,9 @@ export default function Dashboard() {
     if (propertyId === "") {
       setSelectedProperty(null);
     } else {
-      const property = userProperties.find((p) => p.property_id === propertyId);
+      const property = userProperties.find(
+        (p) => p.property_id.toString() === propertyId
+      );
       setSelectedProperty(property || null);
     }
   };

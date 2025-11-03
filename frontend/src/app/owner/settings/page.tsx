@@ -73,8 +73,8 @@ function calculateDates(
 }
 
 export default function SettingsPage() {
-  const { userProperties } = useProperty();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { userProperties, selectedProperty, setSelectedProperty } =
+    useProperty();
   const [settings, setSettings] = useState<BillingSettings | null>(null);
   const [paymentDay, setPaymentDay] = useState<number>(5);
   const [leadDays, setLeadDays] = useState<number>(3);
@@ -90,6 +90,16 @@ export default function SettingsPage() {
   const router = useRouter();
 
   // Repayment notification settings state
+  const [allTenants, setAllTenants] = useState<
+    Array<{
+      user_id: string;
+      name: string;
+      email: string;
+      property_id: string;
+      property_name: string;
+      nick_name: string | null;
+    }>
+  >([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [repaymentSettings, setRepaymentSettings] = useState<
     Record<string, RepaymentNotificationSettings>
@@ -150,9 +160,22 @@ export default function SettingsPage() {
     checkAuth();
   }, [router]);
 
+  // Handle property change
+  const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const propertyId = e.target.value;
+    if (propertyId === "") {
+      setSelectedProperty(null);
+    } else {
+      const property = userProperties.find(
+        (p) => p.property_id.toString() === propertyId
+      );
+      setSelectedProperty(property || null);
+    }
+  };
+
   // Load settings when property is selected
   useEffect(() => {
-    if (!selectedPropertyId) {
+    if (!selectedProperty?.property_id) {
       setSettings(null);
       setPaymentDay(5);
       setLeadDays(3);
@@ -165,7 +188,7 @@ export default function SettingsPage() {
         setMessage(null);
 
         const response = await api.getPropertyBillingSettings(
-          selectedPropertyId
+          selectedProperty.property_id
         );
         const fetchedSettings = response.settings;
 
@@ -188,14 +211,7 @@ export default function SettingsPage() {
     };
 
     loadSettings();
-  }, [selectedPropertyId]);
-
-  // Auto-select first property on mount
-  useEffect(() => {
-    if (userProperties.length > 0 && !selectedPropertyId) {
-      setSelectedPropertyId(userProperties[0].property_id);
-    }
-  }, [userProperties, selectedPropertyId]);
+  }, [selectedProperty]);
 
   // Fetch tenants for repayment notification settings
   useEffect(() => {
@@ -217,39 +233,9 @@ export default function SettingsPage() {
           })
         );
         const flatTenants = allPropertiesTenants.flat();
-        // Group by user_id and combine property names
-        const grouped = flatTenants.reduce((acc, tenant) => {
-          if (!acc[tenant.user_id]) {
-            acc[tenant.user_id] = {
-              user_id: tenant.user_id,
-              name: tenant.name,
-              email: tenant.email,
-              properties: [],
-              nick_name: tenant.nick_name,
-            };
-          }
-          acc[tenant.user_id].properties.push(tenant.property_name);
-          return acc;
-        }, {} as Record<string, { user_id: string; name: string; email: string; properties: string[]; nick_name: string | null }>);
 
-        const groupedArray: Array<{
-          user_id: string;
-          name: string;
-          email: string;
-          properties: string[];
-          nick_name: string | null;
-        }> = Object.values(grouped);
-
-        const finalTenants = groupedArray.map((group) => ({
-          user_id: group.user_id,
-          name: group.name,
-          email: group.email,
-          property_id: "", // Not used for grouped tenants
-          property_name: group.properties.join(", "),
-          nick_name: group.nick_name,
-        }));
-
-        setTenants(finalTenants);
+        // Save all tenants for filtering
+        setAllTenants(flatTenants);
 
         // Load repayment notification settings for all tenants
         let settingsList: RepaymentNotificationSettings[] = [];
@@ -276,25 +262,9 @@ export default function SettingsPage() {
           leadDaysMap[setting.tenant_user_id] = setting.lead_days;
         });
 
-        // Set defaults for tenants without settings
-        finalTenants.forEach((tenant) => {
-          if (!enabledMap[tenant.user_id]) {
-            enabledMap[tenant.user_id] = false; // Default: disabled (user must explicitly enable)
-          }
-          if (!leadDaysMap[tenant.user_id]) {
-            leadDaysMap[tenant.user_id] = 3; // Default: 3 days
-          }
-        });
-
         setRepaymentSettings(settingsMap);
         setRepaymentEnabled(enabledMap);
         setRepaymentLeadDays(leadDaysMap);
-
-        // Auto-select first tenant if available (only on initial load)
-        if (finalTenants.length > 0 && isInitialTenantLoad.current) {
-          setSelectedTenantId(finalTenants[0].user_id);
-          isInitialTenantLoad.current = false;
-        }
       } catch (error) {
         console.error("Error loading tenants:", error);
       }
@@ -305,8 +275,101 @@ export default function SettingsPage() {
     }
   }, [userProperties]);
 
+  // Filter and group tenants based on selectedProperty
+  const filteredTenants = useMemo(() => {
+    if (allTenants.length === 0) return [];
+
+    // If no property selected (All Properties), group all tenants
+    if (!selectedProperty?.property_id) {
+      // Group by user_id and combine property names
+      const grouped = allTenants.reduce((acc, tenant) => {
+        if (!acc[tenant.user_id]) {
+          acc[tenant.user_id] = {
+            user_id: tenant.user_id,
+            name: tenant.name,
+            email: tenant.email,
+            properties: [],
+            nick_name: tenant.nick_name,
+          };
+        }
+        acc[tenant.user_id].properties.push(tenant.property_name);
+        return acc;
+      }, {} as Record<string, { user_id: string; name: string; email: string; properties: string[]; nick_name: string | null }>);
+
+      const groupedArray = Object.values(grouped);
+
+      return groupedArray.map((group) => ({
+        user_id: group.user_id,
+        name: group.name,
+        email: group.email,
+        property_id: "",
+        property_name: group.properties.join(", "),
+        nick_name: group.nick_name,
+      }));
+    }
+
+    // If specific property selected, filter by property_id
+    const selectedPropertyId = selectedProperty.property_id.toString();
+    const filtered = allTenants.filter(
+      (tenant) => tenant.property_id.toString() === selectedPropertyId
+    );
+
+    // Remove duplicates by user_id (in case tenant appears multiple times)
+    const uniqueTenants = filtered.reduce((acc, tenant) => {
+      if (!acc[tenant.user_id]) {
+        acc[tenant.user_id] = tenant;
+      }
+      return acc;
+    }, {} as Record<string, (typeof allTenants)[0]>);
+
+    return Object.values(uniqueTenants).map((tenant) => ({
+      user_id: tenant.user_id,
+      name: tenant.name,
+      email: tenant.email,
+      property_id: tenant.property_id,
+      property_name: tenant.property_name,
+      nick_name: tenant.nick_name,
+    }));
+  }, [allTenants, selectedProperty]);
+
+  // Update tenants when filteredTenants changes
+  useEffect(() => {
+    setTenants(filteredTenants);
+
+    // Set defaults for tenants without settings (only if not already set)
+    filteredTenants.forEach((tenant) => {
+      if (repaymentEnabled[tenant.user_id] === undefined) {
+        setRepaymentEnabled((prev) => ({
+          ...prev,
+          [tenant.user_id]: false,
+        }));
+      }
+      if (repaymentLeadDays[tenant.user_id] === undefined) {
+        setRepaymentLeadDays((prev) => ({
+          ...prev,
+          [tenant.user_id]: 3,
+        }));
+      }
+    });
+
+    // Auto-select first tenant if available (only on initial load)
+    if (filteredTenants.length > 0 && isInitialTenantLoad.current) {
+      setSelectedTenantId(filteredTenants[0].user_id);
+      isInitialTenantLoad.current = false;
+    }
+
+    // If selected tenant is not in filtered list, clear selection
+    if (
+      selectedTenantId &&
+      !filteredTenants.find((t) => t.user_id === selectedTenantId)
+    ) {
+      setSelectedTenantId("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredTenants]);
+
   const handleSave = async () => {
-    if (!selectedPropertyId) {
+    if (!selectedProperty?.property_id) {
       setMessage({ type: "error", text: "Please select a property" });
       return;
     }
@@ -318,7 +381,7 @@ export default function SettingsPage() {
       setMessage(null);
 
       const response = await api.updatePropertyBillingSettings({
-        property_id: selectedPropertyId,
+        property_id: selectedProperty.property_id,
         payment_day: paymentDay,
         notification_lead_days: leadDays,
       });
@@ -366,21 +429,21 @@ export default function SettingsPage() {
         Billing Settings
       </h2>
 
-      {/* Property Selector */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+      {/* Property Selector - Top Left */}
+      <div className="flex items-center gap-2 mb-6">
         <label
           htmlFor="property-select"
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="text-sm font-medium text-gray-700"
         >
-          Property
+          Property:
         </label>
         <select
           id="property-select"
-          value={selectedPropertyId}
-          onChange={(e) => setSelectedPropertyId(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          value={selectedProperty?.property_id || ""}
+          onChange={handlePropertyChange}
+          className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
-          <option value="">Select a property...</option>
+          <option value="">All Properties</option>
           {userProperties.map((property) => (
             <option key={property.property_id} value={property.property_id}>
               {property.name}
@@ -394,125 +457,137 @@ export default function SettingsPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
           <span className="ml-2">Loading settings...</span>
         </div>
-      ) : selectedPropertyId ? (
+      ) : (
         <>
-          {/* Settings Form */}
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Payment & Notification Settings
-            </h3>
+          {/* Payment Notification Settings - Only shown when property is selected */}
+          {selectedProperty?.property_id ? (
+            <>
+              {/* Settings Form */}
+              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Payment Notification Settings
+                </h3>
 
-            {/* Payment Day */}
-            <div className="mb-4">
-              <label
-                htmlFor="payment-day"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Payment Day (1-31)
-              </label>
-              <select
-                id="payment-day"
-                value={paymentDay}
-                onChange={(e) => setPaymentDay(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                  <option key={day} value={day}>
-                    {day}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-sm text-gray-500">
-                The day of each month when payment is due
-              </p>
-            </div>
+                {/* Payment Day */}
+                <div className="mb-4">
+                  <label
+                    htmlFor="payment-day"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Payment Day (1-31)
+                  </label>
+                  <select
+                    id="payment-day"
+                    value={paymentDay}
+                    onChange={(e) => setPaymentDay(Number(e.target.value))}
+                    disabled={!selectedProperty?.property_id}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                      <option key={day} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-sm text-gray-500">
+                    The day of each month when payment is due
+                  </p>
+                </div>
 
-            {/* Notification Lead Days */}
-            <div className="mb-4">
-              <label
-                htmlFor="lead-days"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Notification Lead Days (0-31)
-              </label>
-              <select
-                id="lead-days"
-                value={leadDays}
-                onChange={(e) => setLeadDays(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                {Array.from({ length: 32 }, (_, i) => i).map((days) => (
-                  <option key={days} value={days}>
-                    {days}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-sm text-gray-500">
-                Number of days before payment day to send notification. If
-                greater than payment day, notification will be sent in the
-                previous month.
-              </p>
-            </div>
+                {/* Notification Lead Days */}
+                <div className="mb-4">
+                  <label
+                    htmlFor="lead-days"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Notification Lead Days (0-31)
+                  </label>
+                  <select
+                    id="lead-days"
+                    value={leadDays}
+                    onChange={(e) => setLeadDays(Number(e.target.value))}
+                    disabled={!selectedProperty?.property_id}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    {Array.from({ length: 32 }, (_, i) => i).map((days) => (
+                      <option key={days} value={days}>
+                        {days}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Number of days before payment day to send notification. If
+                    greater than payment day, notification will be sent in the
+                    previous month.
+                  </p>
+                </div>
 
-            {/* Preview */}
-            {previewDates && (
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
-                <h4 className="text-sm font-semibold text-blue-900 mb-2">
-                  Preview (Current Month)
-                </h4>
-                <p className="text-sm text-blue-800">
-                  <strong>Notification Date:</strong>{" "}
-                  {previewDates.notificationDate.toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </p>
-                <p className="text-sm text-blue-800">
-                  <strong>Payment Due Date:</strong>{" "}
-                  {previewDates.paymentDate.toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </p>
+                {/* Preview */}
+                {previewDates && (
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-2">
+                      Preview (Current Month)
+                    </h4>
+                    <p className="text-sm text-blue-800">
+                      <strong>Notification Date:</strong>{" "}
+                      {previewDates.notificationDate.toLocaleDateString(
+                        "en-US",
+                        {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        }
+                      )}
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      <strong>Payment Due Date:</strong>{" "}
+                      {previewDates.paymentDate.toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+                )}
+
+                {/* Save Button */}
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSaving ? "Saving..." : "Save Settings"}
+                </button>
+
+                {/* Current Settings Info */}
+                {settings && (
+                  <p className="mt-2 text-xs text-gray-400">
+                    Last updated:{" "}
+                    {new Date(settings.updated_at).toLocaleString()}
+                  </p>
+                )}
               </div>
-            )}
 
-            {/* Save Button */}
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSaving ? "Saving..." : "Save Settings"}
-            </button>
-          </div>
-
-          {/* Message Display */}
-          {message && (
-            <div
-              className={`p-4 rounded-md mb-4 ${
-                message.type === "success"
-                  ? "bg-green-50 border border-green-200 text-green-800"
-                  : "bg-red-50 border border-red-200 text-red-800"
-              }`}
-            >
-              <p className="text-sm font-medium">{message.text}</p>
+              {/* Message Display */}
+              {message && (
+                <div
+                  className={`p-4 rounded-md mb-4 ${
+                    message.type === "success"
+                      ? "bg-green-50 border border-green-200 text-green-800"
+                      : "bg-red-50 border border-red-200 text-red-800"
+                  }`}
+                >
+                  <p className="text-sm font-medium">{message.text}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6 text-center text-gray-500">
+              Please select a property to configure settings
             </div>
           )}
 
-          {/* Current Settings Info */}
-          {settings && (
-            <div className="bg-gray-50 rounded-lg shadow-sm p-4">
-              <p className="text-sm text-gray-600">
-                <strong>Last updated:</strong>{" "}
-                {new Date(settings.updated_at).toLocaleString()}
-              </p>
-            </div>
-          )}
-
-          {/* Repayment Notification Settings */}
+          {/* Repayment Notification Settings - Always shown */}
           <div className="bg-white rounded-lg shadow-md p-6 mt-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Repayment Notification Settings
@@ -528,53 +603,65 @@ export default function SettingsPage() {
                 repayment notifications.
               </div>
             ) : (
-              <>
-                {/* Tenant Selector */}
-                <div className="mb-6">
-                  <label
-                    htmlFor="tenant-select"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+              <div className="flex gap-6">
+                {/* Left Side: Tenant List */}
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Select Tenant
                   </label>
-                  <select
-                    id="tenant-select"
-                    value={selectedTenantId}
-                    onChange={(e) => setSelectedTenantId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    <option value="">Select a tenant...</option>
+                  <div className="border border-gray-300 rounded-md overflow-hidden">
                     {tenants.map((tenant) => (
-                      <option key={tenant.user_id} value={tenant.user_id}>
-                        {tenant.nick_name || tenant.name} ({tenant.email})
-                      </option>
+                      <button
+                        key={tenant.user_id}
+                        onClick={() => setSelectedTenantId(tenant.user_id)}
+                        className={`w-full text-left px-4 py-3 border-b border-gray-200 last:border-b-0 transition-colors ${
+                          selectedTenantId === tenant.user_id
+                            ? "bg-indigo-50"
+                            : "bg-white hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="font-medium text-sm text-gray-900">
+                          {tenant.nick_name || tenant.name}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {tenant.email}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {tenant.property_name}
+                        </div>
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
 
-                {/* Selected Tenant Settings */}
-                {selectedTenantId && (
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    {(() => {
+                {/* Right Side: Selected Tenant Settings */}
+                <div className="flex-1">
+                  {/* Placeholder label to align with left side */}
+                  <div
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                    aria-hidden="true"
+                  >
+                    &nbsp;
+                  </div>
+                  {selectedTenantId ? (
+                    (() => {
                       const tenant = tenants.find(
                         (t) => t.user_id === selectedTenantId
                       );
                       if (!tenant) return null;
 
                       return (
-                        <>
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <h4 className="text-sm font-semibold text-gray-900">
-                                {tenant.nick_name || tenant.name}
-                              </h4>
-                              <p className="text-xs text-gray-500">
-                                {tenant.email}
-                              </p>
-                              <p className="text-xs text-gray-400">
-                                Properties: {tenant.property_name}
-                              </p>
-                            </div>
+                        <div className="border border-gray-200 rounded-lg p-4">
+                          <div className="mb-4">
+                            <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                              {tenant.nick_name || tenant.name}
+                            </h4>
+                            <p className="text-xs text-gray-500">
+                              {tenant.email}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Properties: {tenant.property_name}
+                            </p>
                           </div>
 
                           {/* Enabled Toggle */}
@@ -602,7 +689,7 @@ export default function SettingsPage() {
                             </label>
                           </div>
 
-                          {/* Lead Days - Always visible when tenant is selected */}
+                          {/* Lead Days */}
                           <div className="mb-4">
                             <label
                               htmlFor={`lead-days-${tenant.user_id}`}
@@ -724,19 +811,19 @@ export default function SettingsPage() {
                               ).toLocaleString()}
                             </p>
                           )}
-                        </>
+                        </div>
                       );
-                    })()}
-                  </div>
-                )}
-              </>
+                    })()
+                  ) : (
+                    <div className="border border-gray-200 rounded-lg p-8 text-center text-gray-500">
+                      Select a tenant from the list to configure settings
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </>
-      ) : (
-        <div className="bg-white rounded-lg shadow-md p-6 text-center text-gray-500">
-          Please select a property to configure settings
-        </div>
       )}
     </div>
   );

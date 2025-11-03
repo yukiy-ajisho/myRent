@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useProperty, Property } from "@/contexts/PropertyContext";
+import { useProperty } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
 // import PaymentScheduleModal from "@/components/PaymentScheduleModal"; // HIDDEN
 
@@ -64,7 +64,8 @@ interface Payment {
 // }
 
 export default function History() {
-  const { userProperties } = useProperty();
+  const { userProperties, selectedProperty, setSelectedProperty } =
+    useProperty();
 
   // タブ切り替えの状態
   const [activeTab, setActiveTab] = useState<"bill" | "payment">("payment");
@@ -84,11 +85,6 @@ export default function History() {
   //   ScheduledPayment[]
   // >([]);
   // const [showScheduleModal, setShowScheduleModal] = useState(false);
-
-  // 共通の状態
-  const [selectedProperty, setSelectedProperty] = useState<Property | null>(
-    null
-  );
 
   // Bill History のフィルター状態
   const [selectedYear, setSelectedYear] = useState<string>("");
@@ -174,20 +170,14 @@ export default function History() {
 
   // プロパティ選択のハンドラー
   const handlePropertyChange = (propertyId: string) => {
-    console.log("=== PROPERTY CHANGE DEBUG ===");
-    console.log("Selected propertyId:", propertyId);
-    console.log("userProperties:", userProperties);
-
     if (propertyId === "") {
-      console.log("Setting selectedProperty to null");
       setSelectedProperty(null);
-      return;
+    } else {
+      const property = userProperties.find(
+        (p) => p.property_id.toString() === propertyId
+      );
+      setSelectedProperty(property || null);
     }
-
-    // Find property by ID
-    const property = userProperties.find((p) => p.property_id === propertyId);
-    console.log("Found property:", property);
-    setSelectedProperty(property || null);
   };
 
   // Payment の Accept ハンドラー
