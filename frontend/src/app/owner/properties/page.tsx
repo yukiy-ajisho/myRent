@@ -617,205 +617,233 @@ export default function Properties() {
                         </div>
                       </div>
                       <div className="mt-3">
-                        {/* 特殊なヘッダーカード */}
-                        <div className="grid grid-cols-[0.7fr_2.1fr_1fr_0.7fr] gap-0 bg-white px-3 py-2 rounded mb-2">
-                          {/* 1. Tenant: */}
-                          <div className="text-left">
-                            <span className="text-sm text-gray-500">
-                              Tenants (
-                              {rentData[property.property_id]?.tenants
-                                ?.length || 0}
-                              ):
-                            </span>
-                          </div>
+                        {/* Table for tenants */}
+                        <table
+                          className="w-full border-separate"
+                          style={{ borderSpacing: "0 0.5rem" }}
+                        >
+                          <colgroup>
+                            <col style={{ width: "22%" }} />
+                            <col style={{ width: "40.23%" }} />
+                            <col style={{ width: "22.22%" }} />
+                            <col style={{ width: "15.56%" }} />
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th className="text-left bg-white px-3 py-2 rounded-tl rounded-bl">
+                                <span className="text-sm text-gray-500">
+                                  Tenants (
+                                  {rentData[property.property_id]?.tenants
+                                    ?.length || 0}
+                                  ):
+                                </span>
+                              </th>
+                              <th className="text-left bg-white px-3 py-2">
+                                <div className="flex items-center gap-3">
+                                  <span className="w-32 text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-500 flex-shrink-0 whitespace-nowrap">
+                                    Commencement
+                                  </span>
+                                  <span className="w-32 text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-500 flex-shrink-0 whitespace-nowrap">
+                                    Expiration
+                                  </span>
+                                </div>
+                              </th>
+                              <th className="text-left bg-white px-3 py-2">
+                                <span className="text-sm text-gray-500 pl-2">
+                                  Pause Utility
+                                </span>
+                              </th>
+                              <th className="text-left bg-white px-3 py-2 rounded-tr rounded-br">
+                                <span className="text-sm text-gray-500 pl-10">
+                                  Rent
+                                </span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rentData[property.property_id]?.tenants?.length >
+                            0 ? (
+                              rentData[property.property_id].tenants.map(
+                                (tenant, index) => {
+                                  const stayPeriod = getStayPeriodForTenant(
+                                    property.property_id,
+                                    tenant.user_id
+                                  );
+                                  const isFirstRow = index === 0;
+                                  const isLastRow =
+                                    index ===
+                                    rentData[property.property_id].tenants
+                                      .length -
+                                      1;
+                                  return (
+                                    <tr key={tenant.user_id}>
+                                      {/* 1. Name + Email */}
+                                      <td
+                                        className={`text-left bg-gray-50 px-3 py-2 ${
+                                          isFirstRow ? "rounded-tl" : ""
+                                        } ${isLastRow ? "rounded-bl" : ""}`}
+                                      >
+                                        <div className="text-sm font-medium text-gray-900">
+                                          {tenant.nick_name || tenant.name}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {tenant.email}
+                                        </div>
+                                      </td>
 
-                          {/* 2. Commencement Date + Expiration Date */}
-                          <div className="text-left">
-                            <div className="grid grid-cols-[1.8fr_1.6fr_0.5fr_0.6fr] gap-0 bg-white px-3 py-2 rounded mb-2">
-                              <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-500">
-                                Commencement
-                              </span>
-                              <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-500">
-                                Expiration
-                              </span>
-                              <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-500"></span>
-                            </div>
-                          </div>
+                                      {/* 2. Start Date + End Date + Edit */}
+                                      <td className="text-left bg-gray-50 px-3 py-2">
+                                        <div className="flex items-center gap-3">
+                                          {editingTenant?.tenantId ===
+                                            tenant.user_id &&
+                                          editingTenant?.propertyId ===
+                                            property.property_id ? (
+                                            <>
+                                              <input
+                                                type="date"
+                                                value={tempStartDate}
+                                                onChange={(e) =>
+                                                  setTempStartDate(
+                                                    e.target.value
+                                                  )
+                                                }
+                                                className="w-32 pl-1 pr-1 text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600 border border-gray-300 rounded py-0.5 flex-shrink-0 -ml-px"
+                                              />
+                                              <input
+                                                type="date"
+                                                value={tempEndDate}
+                                                onChange={(e) =>
+                                                  setTempEndDate(e.target.value)
+                                                }
+                                                className="w-32 text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600 border border-gray-300 rounded px-1 py-0.5 flex-shrink-0"
+                                              />
+                                              <button
+                                                onClick={handleInlineSave}
+                                                className="px-2 py-1 bg-green-500 text-white text-xs rounded-full hover:bg-green-600 flex-shrink-0"
+                                              >
+                                                Save
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span
+                                                className={`w-32 ${
+                                                  stayPeriod?.start_date
+                                                    ? "pl-3"
+                                                    : "pl-8"
+                                                } text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-600 flex-shrink-0 whitespace-nowrap`}
+                                              >
+                                                {stayPeriod?.start_date
+                                                  ? stayPeriod.start_date
+                                                  : "-----"}
+                                              </span>
+                                              <span
+                                                className={`w-32 ${
+                                                  stayPeriod?.end_date
+                                                    ? "pl-0"
+                                                    : "pl-5"
+                                                } text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-600 flex-shrink-0 whitespace-nowrap`}
+                                              >
+                                                {stayPeriod?.end_date
+                                                  ? stayPeriod.end_date
+                                                  : "-----"}
+                                              </span>
+                                              <button
+                                                onClick={() =>
+                                                  handleInlineEditClick(
+                                                    tenant,
+                                                    property
+                                                  )
+                                                }
+                                                className="px-2 py-1 bg-gray-500 text-white text-xs rounded-full hover:bg-gray-600 flex-shrink-0"
+                                              >
+                                                Edit
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      </td>
 
-                          {/* 3. Pause Utility */}
-                          <div className="text-left">
-                            <span className="text-sm text-gray-500 pl-16">
-                              Pause Utility
-                            </span>
-                          </div>
+                                      {/* 3. Edit Button */}
+                                      <td className="text-left bg-gray-50 px-3 py-2">
+                                        <div className="pl-6">
+                                          <button
+                                            onClick={() =>
+                                              handleBreakClick(tenant, property)
+                                            }
+                                            className="px-3 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
+                                          >
+                                            Edit
+                                          </button>
+                                        </div>
+                                      </td>
 
-                          {/* 4. Rent */}
-                          <div className="text-left">
-                            <span className="text-sm text-gray-500 pl-10">
-                              Rent
-                            </span>
-                          </div>
-                        </div>
-                        {rentData[property.property_id]?.tenants?.length > 0 ? (
-                          <div className="space-y-2">
-                            {rentData[property.property_id].tenants.map(
-                              (tenant) => {
-                                const stayPeriod = getStayPeriodForTenant(
-                                  property.property_id,
-                                  tenant.user_id
-                                );
-                                return (
-                                  <div
-                                    key={tenant.user_id}
-                                    className="grid grid-cols-[0.7fr_2.1fr_1fr_0.7fr] gap-0 bg-gray-50 px-3 py-2 rounded"
-                                  >
-                                    {/* 1. Name + Email */}
-                                    <div className="text-left overflow-hidden">
-                                      <div className="text-sm font-medium text-gray-900">
-                                        {tenant.nick_name || tenant.name}
-                                      </div>
-                                      <div className="text-xs text-gray-500">
-                                        {tenant.email}
-                                      </div>
-                                    </div>
-
-                                    {/* 2. Start Date + End Date + Edit */}
-                                    <div className="text-left overflow-hidden">
-                                      <div className="grid grid-cols-[1.8fr_1.6fr_0.5fr_0.6fr] gap-0 bg-gray-50 px-3 py-2 rounded">
-                                        {editingTenant?.tenantId ===
-                                          tenant.user_id &&
-                                        editingTenant?.propertyId ===
-                                          property.property_id ? (
-                                          <>
-                                            <input
-                                              type="date"
-                                              value={tempStartDate}
-                                              onChange={(e) =>
-                                                setTempStartDate(e.target.value)
-                                              }
-                                              className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600 border border-gray-300 rounded px-1 py-0.5"
-                                            />
-                                            <input
-                                              type="date"
-                                              value={tempEndDate}
-                                              onChange={(e) =>
-                                                setTempEndDate(e.target.value)
-                                              }
-                                              className="text-[5px] sm:text-[6px] md:text-[7px] lg:text-sm text-gray-600 border border-gray-300 rounded px-1 py-0.5"
-                                            />
-                                            <button
-                                              onClick={handleInlineSave}
-                                              className="px-2 py-1 bg-green-500 text-white text-xs rounded-full hover:bg-green-600"
-                                            >
-                                              Save
-                                            </button>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-600">
-                                              {stayPeriod?.start_date ? (
-                                                <span className="pl-4">
-                                                  {stayPeriod.start_date}
-                                                </span>
-                                              ) : (
-                                                <span className="pl-9">
-                                                  -----
-                                                </span>
-                                              )}
-                                            </span>
-                                            <span className="text-[5px] sm:text-[6px] md:text-sm lg:text-sm text-gray-600">
-                                              {stayPeriod?.end_date ? (
-                                                stayPeriod.end_date
-                                              ) : (
-                                                <span className="pl-5">
-                                                  -----
-                                                </span>
-                                              )}
-                                            </span>
-                                            <button
-                                              onClick={() =>
-                                                handleInlineEditClick(
-                                                  tenant,
-                                                  property
-                                                )
-                                              }
-                                              className="px-2 py-1 bg-gray-500 text-white text-xs rounded-full hover:bg-gray-600"
-                                            >
-                                              Edit
-                                            </button>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    {/* 3. Edit Button */}
-                                    <div className="text-left overflow-hidden">
-                                      <div className="pl-20">
-                                        <button
-                                          onClick={() =>
-                                            handleBreakClick(tenant, property)
-                                          }
-                                          className="px-3 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
-                                        >
-                                          Edit
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    {/* 4. Rent Input */}
-                                    <div className="text-left overflow-hidden">
-                                      <div className="flex items-center">
-                                        <span className="text-sm text-gray-700 mr-2">
-                                          $
-                                        </span>
-                                        <input
-                                          type="text"
-                                          value={
-                                            currentRents[
-                                              property.property_id
-                                            ]?.[tenant.user_id] || 0
-                                          }
-                                          onChange={(e) =>
-                                            handleRentChange(
-                                              property.property_id,
-                                              tenant.user_id,
-                                              e.target.value
-                                            )
-                                          }
-                                          onInput={(e) => {
-                                            const target =
-                                              e.target as HTMLInputElement;
-                                            const value = target.value;
-                                            // 先頭の0を削除（例: "0200" → "200"）
-                                            const cleanValue =
-                                              value.replace(/^0+/, "") || "0";
-                                            if (value !== cleanValue) {
-                                              target.value = cleanValue;
+                                      {/* 4. Rent Input */}
+                                      <td
+                                        className={`text-left bg-gray-50 px-3 py-2 ${
+                                          isFirstRow ? "rounded-tr" : ""
+                                        } ${isLastRow ? "rounded-br" : ""}`}
+                                      >
+                                        <div className="flex items-center">
+                                          <span className="text-sm text-gray-700 mr-2">
+                                            $
+                                          </span>
+                                          <input
+                                            type="text"
+                                            value={
+                                              currentRents[
+                                                property.property_id
+                                              ]?.[tenant.user_id] || 0
+                                            }
+                                            onChange={(e) =>
                                               handleRentChange(
                                                 property.property_id,
                                                 tenant.user_id,
-                                                cleanValue
-                                              );
+                                                e.target.value
+                                              )
                                             }
-                                          }}
-                                          className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                        />
-                                      </div>
-                                      <div className="mt-1">
-                                        {getSaveStatusIcon(
-                                          property.property_id,
-                                          tenant.user_id
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
+                                            onInput={(e) => {
+                                              const target =
+                                                e.target as HTMLInputElement;
+                                              const value = target.value;
+                                              // 先頭の0を削除（例: "0200" → "200"）
+                                              const cleanValue =
+                                                value.replace(/^0+/, "") || "0";
+                                              if (value !== cleanValue) {
+                                                target.value = cleanValue;
+                                                handleRentChange(
+                                                  property.property_id,
+                                                  tenant.user_id,
+                                                  cleanValue
+                                                );
+                                              }
+                                            }}
+                                            className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                          />
+                                        </div>
+                                        <div className="mt-1">
+                                          {getSaveStatusIcon(
+                                            property.property_id,
+                                            tenant.user_id
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+                              )
+                            ) : (
+                              <tr>
+                                <td
+                                  colSpan={4}
+                                  className="text-sm text-gray-500 bg-gray-50 px-3 py-2"
+                                >
+                                  No tenants
+                                </td>
+                              </tr>
                             )}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-500">No tenants</p>
-                        )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
