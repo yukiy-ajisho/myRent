@@ -24,6 +24,7 @@ interface Tenant {
   email: string;
   property_id: string;
   property_name: string;
+  nick_name?: string | null;
 }
 
 interface Repayment {
@@ -84,6 +85,7 @@ export default function Loan() {
   const [isLoadingRepayments, setIsLoadingRepayments] = useState(false);
   const [showCreateLoanModal, setShowCreateLoanModal] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]); // Add state for all tenants
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
 
   const fetchTenants = useCallback(async () => {
     try {
@@ -96,6 +98,7 @@ export default function Loan() {
             email: t.email,
             property_id: p.property_id,
             property_name: p.name,
+            nick_name: t.nick_name || null,
           }));
         })
       );
@@ -180,26 +183,74 @@ export default function Loan() {
     };
   }, [selectedProperty, tenants]);
 
-  // Filter loans based on selected property
+  // Get available tenants for dropdown based on selected property
+  const availableTenants = useMemo(() => {
+    // Filter tenants by selected property
+    const filtered = selectedProperty
+      ? tenants.filter(
+          (t) =>
+            t.property_id.toString() === selectedProperty.property_id.toString()
+        )
+      : tenants;
+
+    // Get unique tenants by user_id, prioritizing nick_name from tenants array
+    const tenantMap = new Map<
+      string,
+      { user_id: string; name: string; nick_name?: string | null }
+    >();
+
+    filtered.forEach((tenant) => {
+      if (!tenantMap.has(tenant.user_id)) {
+        tenantMap.set(tenant.user_id, {
+          user_id: tenant.user_id,
+          name: tenant.name,
+          nick_name: tenant.nick_name || null,
+        });
+      } else {
+        // If tenant already exists, update nick_name if current tenant has one
+        const existing = tenantMap.get(tenant.user_id)!;
+        if (tenant.nick_name && !existing.nick_name) {
+          existing.nick_name = tenant.nick_name;
+        }
+      }
+    });
+
+    return Array.from(tenantMap.values()).sort((a, b) => {
+      const nameA = a.nick_name || a.name;
+      const nameB = b.nick_name || b.name;
+      return nameA.localeCompare(nameB);
+    });
+  }, [tenants, selectedProperty]);
+
+  // Filter loans based on selected property and tenant
   const filteredLoans = useMemo(() => {
-    // All Propertiesが選択されている場合
-    if (!selectedProperty) {
-      return loans;
+    let filtered = loans;
+
+    // First, filter by property
+    if (selectedProperty) {
+      // 選択されたプロパティのテナントID一覧を取得
+      const targetTenantIds = tenants
+        .filter(
+          (t) =>
+            t.property_id.toString() === selectedProperty.property_id.toString()
+        )
+        .map((t) => t.user_id);
+
+      // そのテナントのloansだけをフィルタリング
+      filtered = filtered.filter((loan) =>
+        targetTenantIds.includes(loan.tenant_user_id)
+      );
     }
 
-    // 選択されたプロパティのテナントID一覧を取得
-    const targetTenantIds = tenants
-      .filter(
-        (t) =>
-          t.property_id.toString() === selectedProperty.property_id.toString()
-      )
-      .map((t) => t.user_id);
+    // Then, filter by selected tenant
+    if (selectedTenantId) {
+      filtered = filtered.filter(
+        (loan) => loan.tenant_user_id === selectedTenantId
+      );
+    }
 
-    // そのテナントのloansだけをフィルタリング
-    return loans.filter((loan) =>
-      targetTenantIds.includes(loan.tenant_user_id)
-    );
-  }, [loans, tenants, selectedProperty]);
+    return filtered;
+  }, [loans, tenants, selectedProperty, selectedTenantId]);
 
   // Filter repayments based on selected property
   const filteredRepayments = useMemo(() => {
@@ -222,21 +273,32 @@ export default function Loan() {
     );
   }, [repayments, tenants, selectedProperty]);
 
-  // Filter scheduled repayments based on selected property
+  // Filter scheduled repayments based on selected property and tenant
   const filteredScheduledRepayments = useMemo(() => {
-    if (!selectedProperty) {
-      return scheduledRepayments;
+    let filtered = scheduledRepayments;
+
+    // First, filter by property
+    if (selectedProperty) {
+      const targetTenantIds = tenants
+        .filter(
+          (t) =>
+            t.property_id.toString() === selectedProperty.property_id.toString()
+        )
+        .map((t) => t.user_id);
+      filtered = filtered.filter((repayment) =>
+        targetTenantIds.includes(repayment.tenant_user_id)
+      );
     }
-    const targetTenantIds = tenants
-      .filter(
-        (t) =>
-          t.property_id.toString() === selectedProperty.property_id.toString()
-      )
-      .map((t) => t.user_id);
-    return scheduledRepayments.filter((repayment) =>
-      targetTenantIds.includes(repayment.tenant_user_id)
-    );
-  }, [scheduledRepayments, tenants, selectedProperty]);
+
+    // Then, filter by selected tenant
+    if (selectedTenantId) {
+      filtered = filtered.filter(
+        (repayment) => repayment.tenant_user_id === selectedTenantId
+      );
+    }
+
+    return filtered;
+  }, [scheduledRepayments, tenants, selectedProperty, selectedTenantId]);
 
   // Confirm repayment handler
   const handleConfirmRepayment = async (repaymentId: string) => {
@@ -261,11 +323,13 @@ export default function Loan() {
       );
       setSelectedProperty(property || null);
     }
+    // Reset tenant selection when property changes
+    setSelectedTenantId(null);
   };
 
   return (
     <div className="container mx-auto py-6 px-4">
-      {/* Header with Property Dropdown and Create Loan Button */}
+      {/* Header with Property Dropdown, Tenant Filter, and Create Loan Button */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
           <label className="text-gray-700 font-semibold">Property:</label>
@@ -278,6 +342,20 @@ export default function Loan() {
             {userProperties.map((property) => (
               <option key={property.property_id} value={property.property_id}>
                 {property.name}
+              </option>
+            ))}
+          </select>
+
+          <label className="text-gray-700 font-semibold ml-4">Tenant:</label>
+          <select
+            value={selectedTenantId || ""}
+            onChange={(e) => setSelectedTenantId(e.target.value || null)}
+            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Tenants</option>
+            {availableTenants.map((tenant) => (
+              <option key={tenant.user_id} value={tenant.user_id}>
+                {tenant.nick_name || tenant.name}
               </option>
             ))}
           </select>
