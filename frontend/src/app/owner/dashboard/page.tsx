@@ -227,7 +227,7 @@ export default function Dashboard() {
               {/* Tenant Balance */}
               <div className="h-full">
                 <h2 className="text-2xl font-bold mb-4">
-                  Tenant Balance
+                  ( ͡° ͜ʖ ͡°) Tenant Balance
                   {selectedProperty ? ` - ${selectedProperty.name}` : ""}
                 </h2>
                 <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm h-full">

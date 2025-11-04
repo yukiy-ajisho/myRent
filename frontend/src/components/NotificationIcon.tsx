@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import { Bell } from "lucide-react";
 import { api } from "@/lib/api";
 import { NotificationDropdown } from "./NotificationDropdown";
+import {
+  calculateUnreadCount,
+  formatUnreadBadge,
+} from "@/utils/notificationUtils";
 
 export interface Notification {
   notification_id: string;
@@ -23,7 +27,7 @@ export function NotificationIcon() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Unread count
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadCount = calculateUnreadCount(notifications);
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -57,7 +61,7 @@ export function NotificationIcon() {
         {/* Unread Badge */}
         {unreadCount > 0 && (
           <span className="absolute top-0 right-0 inline-flex items-center justify-center h-5 w-5 text-xs font-bold text-white bg-red-600 rounded-full">
-            {unreadCount > 9 ? "9+" : unreadCount}
+            {formatUnreadBadge(unreadCount)}
           </span>
         )}
       </button>
