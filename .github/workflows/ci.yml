@@ -74,31 +74,27 @@ jobs:
 
   deploy_vercel:
     name: Deploy to Vercel (prod)
-    needs: [frontend, backend]
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
+    needs: [frontend, backend]   # テスト成功後に実行
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install Vercel CLI
-        run: npm i -g vercel
-
-      # （任意）ORG/PROJECTを明示したい場合は env を付与
-      # env:
-      #   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      #   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Pull Vercel environment
-        run: vercel pull --yes --environment=production --token ${{ secrets.VERCEL_TOKEN }}
+        run: npm i -g vercel@latest
 
       - name: Deploy to Vercel (prod)
-        run: vercel deploy --prod --yes --token ${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel deploy --prod --yes --token "$VERCEL_TOKEN"
+
 
   deploy_render:
     name: Deploy to Render

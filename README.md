@@ -217,6 +217,6 @@ The application will be available at:
 4. You'll be redirected to the admin panel at /admin
 5. Select a property and month
 6. Configure utility settings and save
-7. Run bill calculation
 
+7. Run bill calculation
 8. View all table data in the dump section
