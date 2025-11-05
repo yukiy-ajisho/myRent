@@ -48,7 +48,7 @@ export function storeCodeVerifier(codeVerifier: string): void {
     const isSecure = window.location.protocol === "https:";
     const secureFlag = isSecure ? "; secure" : "";
 
-    const cookieString = `pkce_code_verifier=${codeVerifier}; path=/; expires=${expires.toUTCString()}${secureFlag}; samesite=lax`;
+    const cookieString = `supabase.auth.token-code-verifier=${codeVerifier}; path=/; expires=${expires.toUTCString()}${secureFlag}; samesite=lax`;
 
     // デバッグログ
     console.log("Setting PKCE cookie:", cookieString);
@@ -63,7 +63,7 @@ export function storeCodeVerifier(codeVerifier: string): void {
       console.log("All cookies after setting:", cookies);
       const pkceCookie = cookies
         .split(";")
-        .find((c) => c.trim().startsWith("pkce_code_verifier="));
+        .find((c) => c.trim().startsWith("supabase.auth.token-code-verifier="));
       console.log("PKCE cookie found:", pkceCookie);
     }, 100);
   }
@@ -90,6 +90,6 @@ export function clearCodeVerifier(): void {
 
     // Clear from cookie
     document.cookie =
-      "pkce_code_verifier=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      "supabase.auth.token-code-verifier=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
   }
 }

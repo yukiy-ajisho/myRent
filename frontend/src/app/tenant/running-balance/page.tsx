@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { getAuthState } from "@/lib/auth-state-client";
 import { useRouter } from "next/navigation";
 import AccessDenied from "@/components/AccessDenied";
+import { getErrorMessage } from "@/lib/is-axios-error";
 
 // LedgerRecord データの型定義
 interface LedgerRecord {
@@ -95,12 +96,18 @@ export default function TenantRunningBalance() {
 
       setLedgerRecords(data.ledgerRecords || []);
       setUserProperties(data.userProperties || []);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("=== ERROR DETAILS ===");
       console.error("Error object:", err);
-      console.error("Error message:", err.message);
-      console.error("Error stack:", err.stack);
-      setError(`Failed to fetch running balance: ${err.message}`);
+      if (err instanceof Error) {
+        console.error("Error message:", err.message);
+        console.error("Error stack:", err.stack);
+      }
+      const errorMessage = getErrorMessage(
+        err,
+        "Failed to fetch running balance"
+      );
+      setError(`Failed to fetch running balance: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }

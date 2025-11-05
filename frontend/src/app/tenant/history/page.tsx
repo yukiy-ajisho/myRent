@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { getAuthState } from "@/lib/auth-state-client";
 import { useRouter } from "next/navigation";
 import AccessDenied from "@/components/AccessDenied";
+import { getErrorMessage } from "@/lib/is-axios-error";
 
 // Bill Line データの型定義（app_userは削除）
 interface BillLine {
@@ -103,12 +104,15 @@ export default function TenantHistoryPage() {
       if (data.properties && data.properties.length > 0) {
         setSelectedProperty(data.properties[0].property_id);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("=== ERROR DETAILS ===");
       console.error("Error object:", err);
-      console.error("Error message:", err.message);
-      console.error("Error stack:", err.stack);
-      setError(`データの取得に失敗しました: ${err.message}`);
+      if (err instanceof Error) {
+        console.error("Error message:", err.message);
+        console.error("Error stack:", err.stack);
+      }
+      const errorMessage = getErrorMessage(err, "データの取得に失敗しました");
+      setError(`データの取得に失敗しました: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }

@@ -374,9 +374,9 @@ export default function AdminPanel() {
 
       if (Object.keys(validStayPeriods).length > 0) {
         await api.saveStayPeriods({
-          property_id: selectedProperty,
-          stay_periods: validStayPeriods,
-          break_periods: validBreakPeriods,
+          propertyId: selectedProperty,
+          stayPeriods: validStayPeriods,
+          breakPeriods: validBreakPeriods,
         });
       }
 
@@ -484,7 +484,7 @@ export default function AdminPanel() {
         return;
       }
 
-      // property_idを数値に変換
+      // property_idを数値に変換してバリデーション
       const propertyId = parseInt(newTenant.property_id);
       console.log("parsed property_id:", propertyId);
       console.log("isNaN:", isNaN(propertyId));
@@ -497,7 +497,7 @@ export default function AdminPanel() {
       const tenantData = {
         ...newTenant,
         user_type: "tenant",
-        property_id: propertyId,
+        property_id: newTenant.property_id, // API expects string, keep as string
       };
 
       console.log("tenantData:", tenantData);
@@ -511,7 +511,6 @@ export default function AdminPanel() {
         setNewTenant({
           name: "",
           email: "",
-          user_type: "tenant",
           property_id: "",
         });
         // データを再読み込み

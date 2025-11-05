@@ -9,7 +9,20 @@ const DIVISION_METHOD_LABELS = {
   fixed: "Fixed",
   equalshare: "Headcounts",
   bydays: "Days Precent",
-};
+} as const;
+
+/**
+ * Get division method label safely
+ * Returns the label if method exists, otherwise returns the original method string
+ */
+function getDivisionMethodLabel(method: string): string {
+  if (method in DIVISION_METHOD_LABELS) {
+    return DIVISION_METHOD_LABELS[
+      method as keyof typeof DIVISION_METHOD_LABELS
+    ];
+  }
+  return method;
+}
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -84,7 +97,7 @@ export default function PreviewModal({
     setIsLoadingUserNames(true);
     try {
       const names: Record<string, string> = {};
-      const nicknames: Record<string, string> = {};
+      const nicknames: Record<string, string | null> = {};
 
       // Fetch user names and nicknames in parallel
       const promises = userIds.map(async (userId) => {
@@ -281,9 +294,9 @@ export default function PreviewModal({
                             </span>
                             {billLine.detail_json && (
                               <span className="text-sm text-gray-600">
-                                {DIVISION_METHOD_LABELS[
+                                {getDivisionMethodLabel(
                                   billLine.detail_json.method
-                                ] || billLine.detail_json.method}
+                                )}
                               </span>
                             )}
                           </div>

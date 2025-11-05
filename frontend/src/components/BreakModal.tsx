@@ -186,8 +186,8 @@ export default function BreakModal({
 
   const handleCancel = () => {
     setNewBreak({
-      start_date: "",
-      end_date: "",
+      break_start: "",
+      break_end: "",
     });
     setShowAddForm(false);
     setMessage("");

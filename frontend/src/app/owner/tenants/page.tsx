@@ -79,7 +79,10 @@ export default function Tenants() {
       console.log("API Response received:", data);
       console.log(
         "Tenants with nicknames:",
-        data.tenants?.map((t) => ({ name: t.name, nick_name: t.nick_name }))
+        data.tenants?.map((t: Tenant) => ({
+          name: t.name,
+          nick_name: t.nick_name,
+        }))
       );
 
       const tenants = data.tenants || [];
@@ -352,22 +355,32 @@ export default function Tenants() {
 
                       {/* 5. Property */}
                       <div className="text-gray-600 py-3 flex items-center">
-                        {selectedProperty ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {tenant.property_name}
-                          </span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {tenant.properties.map((property, index) => (
-                              <span
-                                key={property.property_id}
-                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                              >
-                                {property.property_name}
+                        {selectedProperty
+                          ? "property_name" in tenant && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {tenant.property_name}
                               </span>
-                            ))}
-                          </div>
-                        )}
+                            )
+                          : "properties" in tenant && (
+                              <div className="flex flex-wrap gap-1">
+                                {tenant.properties.map(
+                                  (
+                                    property: {
+                                      property_id: string;
+                                      property_name: string;
+                                    },
+                                    index: number
+                                  ) => (
+                                    <span
+                                      key={property.property_id}
+                                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                                    >
+                                      {property.property_name}
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                            )}
                       </div>
                     </div>
                   </div>

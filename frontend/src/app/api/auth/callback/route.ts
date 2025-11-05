@@ -38,14 +38,9 @@ export async function GET(request: NextRequest) {
       console.log("Code:", code);
       console.log("Request URL:", requestUrl.toString());
 
-      // PKCEのcode_verifierをCookieから取得
-      const codeVerifier = request.cookies.get("pkce_code_verifier")?.value;
-      console.log("Code Verifier:", codeVerifier ? "Found" : "Not found");
-
       // PKCEパラメータを使用したサーバーサイド認証
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code, {
-        codeVerifier: codeVerifier,
-      });
+      // Supabase will automatically get code_verifier from storage (supabase.auth.token-code-verifier)
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (error) {
         console.error("Server-side exchange error:", error);
@@ -75,7 +70,7 @@ export async function GET(request: NextRequest) {
       const response = NextResponse.redirect(
         `${requestUrl.origin}/user-type-selection`
       );
-      response.cookies.set("pkce_code_verifier", "", {
+      response.cookies.set("supabase.auth.token-code-verifier", "", {
         path: "/",
         expires: new Date(0),
       });
