@@ -27,7 +27,7 @@ interface Repayment {
   amount: number;
   repayment_date: string;
   note?: string | null;
-  status: "unpaid" | "pending" | "confirmed";
+  status: "unpaid" | "pending" | "confirmed" | "partially_paid";
   confirmed_date?: string | null;
   owner?: {
     user_id: string;
@@ -46,7 +46,7 @@ interface ScheduledRepayment {
   is_auto_paid?: boolean;
   repayment_date: string;
   note?: string | null;
-  status: "unpaid" | "pending" | "confirmed";
+  status: "unpaid" | "pending" | "confirmed" | "partially_paid";
   confirmed_date?: string | null;
   due_date: string;
   owner?: {
