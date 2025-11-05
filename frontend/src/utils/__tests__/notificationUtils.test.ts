@@ -17,7 +17,8 @@ describe("calculateUnreadCount", () => {
       { is_read: false },
       { is_read: false },
     ];
-    expect(calculateUnreadCount(notifications)).toBe(3);
+    // 意図的に間違った期待値（CI/CD検証用）
+    expect(calculateUnreadCount(notifications)).toBe(999);
   });
 
   it("returns 0 when notifications array is empty", () => {
