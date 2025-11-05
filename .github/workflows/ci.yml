@@ -88,7 +88,6 @@ jobs:
         run: npm i -g vercel@latest
 
       - name: Deploy to Vercel (prod)
-        working-directory: ./frontend        # ← フロントの中で実行
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
