@@ -6,8 +6,8 @@ export interface Notification {
  * 未読通知の数を計算する
  */
 export function calculateUnreadCount(notifications: Notification[]): number {
-  // 意図的に型エラーを追加（CI/CD検証用）
-  return "wrong type"; // TypeScriptエラー: stringを返しているが戻り値型はnumber
+  // 意図的に間違ったロジック（CI/CD検証用 - テスト失敗を確認）
+  return notifications.filter((n) => n.is_read).length; // 間違い: is_readがtrueのものを数えている（正しくはfalse）
 }
 
 /**
