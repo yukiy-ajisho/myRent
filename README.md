@@ -219,4 +219,5 @@ The application will be available at:
 6. Configure utility settings and save
 
 7. Run bill calculation
+
 8. View all table data in the dump section
