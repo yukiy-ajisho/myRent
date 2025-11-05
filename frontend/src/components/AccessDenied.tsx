@@ -56,7 +56,7 @@ export default function AccessDenied({
           <p className="mt-2 text-sm text-gray-600">
             You are registered as a{" "}
             <span className="font-semibold capitalize">{userType}</span> and
-            don't have permission to access this page.
+            don&apos;t have permission to access this page.
           </p>
         </div>
 

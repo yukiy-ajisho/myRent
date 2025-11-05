@@ -167,8 +167,8 @@ export default function TenantDashboard() {
               No Properties Assigned
             </h3>
             <p className="mt-2 text-sm text-gray-600">
-              You haven't been assigned to any properties yet. Please contact
-              your property manager to get access.
+              You haven&apos;t been assigned to any properties yet. Please
+              contact your property manager to get access.
             </p>
           </div>
           <div className="mt-6">
