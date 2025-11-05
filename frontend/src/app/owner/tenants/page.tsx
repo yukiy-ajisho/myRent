@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useProperty, Property } from "@/contexts/PropertyContext";
 import { api } from "@/lib/api";
+import { isAxiosError, isErrorWithMessage } from "@/lib/is-axios-error";
 import { User } from "lucide-react";
 
 interface Tenant {
@@ -170,14 +171,14 @@ export default function Tenants() {
 
       // 全テナント一覧を再読み込み
       fetchAllTenants();
-    } catch (error: any) {
+    } catch (error: unknown) {
       // バックエンドからのエラーメッセージを取得
       let errorMessage = "Error: Failed to add tenant";
 
-      if (error?.response?.data?.error) {
+      if (isAxiosError(error)) {
         errorMessage = error.response.data.error;
       } else if (
-        error?.message &&
+        isErrorWithMessage(error) &&
         !error.message.includes("API request failed")
       ) {
         errorMessage = error.message;

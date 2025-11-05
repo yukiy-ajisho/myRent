@@ -186,7 +186,7 @@ export default function PaymentScheduleModal({
       if (!specificDateMonth) return;
 
       const [year, month] = specificDateMonth.split("-").map(Number);
-      let dueDate = new Date(year, month - 1, specificDate);
+      const dueDate = new Date(year, month - 1, specificDate);
 
       // Check if the selected day exceeds the month's last day
       const lastDay = new Date(year, month, 0).getDate();

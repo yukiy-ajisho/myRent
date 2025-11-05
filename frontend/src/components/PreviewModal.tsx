@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, CheckCircle } from "lucide-react";
 import { api } from "@/lib/api";
+import { isAxiosError, isErrorWithMessage } from "@/lib/is-axios-error";
 
 const DIVISION_METHOD_LABELS = {
   fixed: "Fixed",
@@ -47,9 +48,9 @@ export default function PreviewModal({
 }: PreviewModalProps) {
   const [isConfirming, setIsConfirming] = useState(false);
   const [userNames, setUserNames] = useState<Record<string, string>>({});
-  const [userNicknames, setUserNicknames] = useState<Record<string, string>>(
-    {}
-  );
+  const [userNicknames, setUserNicknames] = useState<
+    Record<string, string | null>
+  >({});
   const [isLoadingUserNames, setIsLoadingUserNames] = useState(false);
 
   const handleConfirm = async () => {
@@ -92,18 +93,21 @@ export default function PreviewModal({
           const response = await api.getUserById(userId);
           console.log(`[DEBUG] User response for ${userId}:`, response);
           names[userId] = response.name || `User ${userId.slice(0, 8)}`;
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(`Failed to fetch user ${userId}:`, error);
           console.error(`Error details:`, {
-            message: error.message,
-            status: error.response?.status,
-            data: error.response?.data,
+            message: isErrorWithMessage(error)
+              ? error.message
+              : "Unknown error",
+            status: isAxiosError(error) ? "response exists" : "no response",
+            data: isAxiosError(error) ? error.response.data : "no data",
           });
 
           // より詳細なフォールバック表示
           if (
-            error.message.includes("Tenant not found") ||
-            error.message.includes("User not found")
+            isErrorWithMessage(error) &&
+            (error.message.includes("Tenant not found") ||
+              error.message.includes("User not found"))
           ) {
             names[userId] = `Unknown User (${userId.slice(0, 8)})`;
           } else {
@@ -120,7 +124,7 @@ export default function PreviewModal({
             nicknameResponse
           );
           nicknames[userId] = nicknameResponse.nick_name || null;
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(`Failed to fetch nickname for ${userId}:`, error);
           nicknames[userId] = null;
         }
